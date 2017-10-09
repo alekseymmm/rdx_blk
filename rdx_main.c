@@ -47,7 +47,7 @@ static const struct block_device_operations rdx_blk_fops ={
 		.release = rdx_blk_release,
 };
 
-static void rdx_destroy_dev(struct rdx_blk *rdx_blk)
+static void rdx_destroy_dev(void)
 {
 	pr_debug("Destroying device %s\n", RDX_BLKDEV_NAME);
 
@@ -169,7 +169,7 @@ static int rdx_blk_create_dev(void)
 	return 0;
 
 out:
-	rdx_destroy_dev(rdx_blk);
+	rdx_destroy_dev();
 	return ret;
 }
 
@@ -200,13 +200,14 @@ static int __init rdx_blk_init(void)
 static void __exit rdx_blk_exit(void)
 {
 	if (rdx_blk != NULL){
-		rdx_destroy_dev(rdx_blk);
+		rdx_destroy_dev();
 	}
 
 	unregister_blkdev(rdx_major, RDX_BLKDEV_NAME);
 
-    if (rdx_request_cachep)
+    if (rdx_request_cachep){
         kmem_cache_destroy(rdx_request_cachep);
+    }
 }
 
 int __set_cur_cmd(const char *str, struct kernel_param *kp){
@@ -215,7 +216,7 @@ int __set_cur_cmd(const char *str, struct kernel_param *kp){
 		rdx_blk_create_dev();
 	}
 	if(!strcmp(str, "destroy\n")){
-		rdx_destroy_dev(rdx_blk);
+		rdx_destroy_dev();
 	}
 
 	return 0;

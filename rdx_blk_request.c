@@ -37,6 +37,7 @@ static void __end_transfer(struct bio *bio)
 	if (!req->err)
 		req->err = bio->bi_error;
 
+	pr_debug("end_io for bio=%p\n", bio);
 	__req_put(req);
 }
 
@@ -46,8 +47,8 @@ static void __start_transfer(struct rdx_request *req)
 	struct bio *bio = req->usr_bio;
 	struct bio *split;
 
-	if(bio_sectors(bio) > 4096){
-		split = bio_split(bio, 4096, GFP_NOIO, rdx_blk->split_bioset);
+	if(bio_sectors(bio) > 8){
+		split = bio_split(bio, 8, GFP_NOIO, rdx_blk->split_bioset);
 		if(!split){
 			pr_debug("Cannot split\n");
 			req->err = -ENOMEM;

@@ -203,11 +203,12 @@ static void __exit rdx_blk_exit(void)
 		rdx_destroy_dev();
 	}
 
-	unregister_blkdev(rdx_major, RDX_BLKDEV_NAME);
-
     if (rdx_request_cachep){
         kmem_cache_destroy(rdx_request_cachep);
     }
+
+	unregister_blkdev(rdx_major, RDX_BLKDEV_NAME);
+	pr_debug("%s unregistered, exit.\n", RDX_BLKDEV_NAME);
 }
 
 int __set_cur_cmd(const char *str, struct kernel_param *kp){

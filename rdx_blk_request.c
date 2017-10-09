@@ -13,6 +13,8 @@
 
 static void __req_put(struct rdx_request *req)
 {
+	pr_debug("Before dec_and_test for req=%p req->ref->cnt=%d\n", req, atomic_read(&req->ref_cnt));
+
 	if (atomic_dec_and_test(&req->ref_cnt)) {
 		struct bio *usr_bio = req->usr_bio;
 
@@ -22,6 +24,7 @@ static void __req_put(struct rdx_request *req)
 		usr_bio->bi_private = req->usr_bio_private;
 		usr_bio->bi_error = req->err;
 
+		pr_debug("For req=%p restore usr_bio=%p parameters and end it\n", req, usr_bio);
 		bio_endio(usr_bio);
 		kmem_cache_free(rdx_request_cachep, req);
 	}
@@ -79,7 +82,7 @@ blk_qc_t rdx_blk_make_request(struct request_queue *q, struct bio *bio){
 		return BLK_QC_T_NONE;
 	}
 
-	req = kmem_cache_alloc(rdx_request_cachep, GFP_KERNEL);
+	req = kmem_cache_zalloc(rdx_request_cachep, GFP_KERNEL);
 	if (!req) {
 		pr_debug("Cannot allocate request\n");
 		bio_io_error(bio);

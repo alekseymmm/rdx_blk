@@ -85,6 +85,7 @@ static void rdx_destroy_dev(struct rdx_blk *rdx_blk)
 	}
 
 	kfree(rdx_blk);
+	rdx_blk = NULL;
 	pr_debug("Device %s destroyed \n", RDX_BLKDEV_NAME);
 }
 
@@ -198,7 +199,7 @@ static int __init rdx_blk_init(void)
 
 static void __exit rdx_blk_exit(void)
 {
-	if (rdx_blk){
+	if (rdx_blk != NULL){
 		rdx_destroy_dev(rdx_blk);
 	}
 

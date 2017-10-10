@@ -11,7 +11,7 @@
 #include "rdx_blk.h"
 #include "rdx_blk_request.h"
 
-static void __req_put(struct rdx_request *req)
+void __req_put(struct rdx_request *req)
 {
 	pr_debug("Before dec_and_test for req=%p req->ref->cnt=%d\n", req, atomic_read(&req->ref_cnt));
 
@@ -26,6 +26,7 @@ static void __req_put(struct rdx_request *req)
 
 		pr_debug("For req=%p restore usr_bio=%p parameters and end it\n", req, usr_bio);
 		bio_endio(usr_bio);
+		atomic_dec(&req->range->ref_cnt); //release range
 		kmem_cache_free(rdx_request_cachep, req);
 	}
 }
@@ -73,6 +74,7 @@ static void __start_transfer(struct rdx_request *req)
 	submit_bio(bio);
 }
 
+// request covers bio to only one range
 blk_qc_t rdx_blk_make_request(struct request_queue *q, struct bio *bio){
 	struct rdx_blk *dev = q->queuedata;
 	struct rdx_request *req;
@@ -83,24 +85,36 @@ blk_qc_t rdx_blk_make_request(struct request_queue *q, struct bio *bio){
 		return BLK_QC_T_NONE;
 	}
 
+	if(bio_data_dir(bio) == WRITE){
+		msb_write_filter(dev->data, bio);
+	} else { // READ
+		msb_read_filter(dev->data, bio);
+	}
+
+	return BLK_QC_T_NONE;
+}
+
+
+struct rdx_request *__create_req(struct bio *bio, struct rdx_blk *dev){
+	struct rdx_request *req;
+
 	req = kmem_cache_zalloc(rdx_request_cachep, GFP_KERNEL);
 	if (!req) {
 		pr_debug("Cannot allocate request\n");
 		bio_io_error(bio);
-		return BLK_QC_T_NONE;
+		return NULL;
 	}
 
 	req->first_sector = bio_first_sector(bio);
 	req->sectors = bio_sectors(bio);
 	req->dev = dev;
 	req->rw = bio_data_dir(bio);
-	//store info about initial bio
+
+	//save info about initial bio
 	req->usr_bio = bio;
 	req->usr_bio_private = bio->bi_private;
 	req->__usr_bio_end_io = bio->bi_end_io;
 
 	atomic_set(&req->ref_cnt, 1);
-
-	__start_transfer(req);
-	return BLK_QC_T_NONE;
+	return req;
 }

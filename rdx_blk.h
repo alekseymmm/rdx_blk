@@ -47,6 +47,7 @@ struct rdx_request{
 	int 			err;
 	bio_end_io_t	*__usr_bio_end_io;
 	void 			*usr_bio_private;
+	struct msb_range *range;
 };
 
 struct rdx_blk {

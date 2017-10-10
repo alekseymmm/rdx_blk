@@ -6,6 +6,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/kernel.h>
 
 #include <linux/moduleparam.h>
 #include <linux/sched.h>
@@ -14,10 +15,12 @@
 #include <linux/init.h>
 #include <linux/types.h>
 #include <linux/slab.h>
+#include <linux/bitmap.h>
 
 #include "rdx_blk.h"
 #include "rdx_blk_hashtable.h"
 #include "rdx_blk_range.h"
+#include "rdx_blk_request.h"
 
 
 //must be called under data->used_ranges_lock
@@ -228,122 +231,142 @@ void msb_clearbits_in_range(struct msb_range *range, uint64_t lba, uint32_t len)
 
 //must be called under range->lock
 int msb_intersect_range(struct msb_data *data, struct msb_range *range, struct rdx_request *req){
-//	int first_bit, next_zero_bit;
-//	uint64_t offset;
-//	uint64_t intersection;
-//	struct rvm_subcommand *new_scmd;
-//	int scmd_end_bit = lba2bit(range, scmd->lba + scmd->len - 1); //the last bit covered by scmd
-//
-//	while(1){ //is it a good idea ? It is!
-//		int scmd_lba_bit = lba2bit(range, scmd->lba);
-//
-//		pr_debug("Intersect scmd=%p lba=%llu, len=%d with range=%p start_lba_main=%llu\n",
-//				scmd, scmd->lba, scmd->len, range, range->start_lba_main);
-//
-//
-//		first_bit = find_next_bit(range->bitmap, msb_bitmap_size, scmd_lba_bit);
-//		next_zero_bit = find_next_zero_bit(range->bitmap, msb_bitmap_size, first_bit);
-//		if(next_zero_bit != msb_range_size_sectors){
-//			next_zero_bit--; //if we  are still not in the end of the mask
-//		}
-//
-//		pr_debug("scmd_lba_bit=%d, scmd_end_bit=%d, in range first_bit=%d, last_bit=%d\n",
-//				scmd_lba_bit, scmd_end_bit, first_bit, next_zero_bit);
-//
-//		/* Break point  - there are no more intersections
-//		 * scmd       |------|
-//		 * range               |------
-//		 */
-//		if(first_bit > scmd_end_bit){
-//			//this means that the last subcommand in the list is not intersected with any bits in range
-//			//hence it is command to main and could be cached
-//			pr_debug("First found set bit =%d  > scmd->end bit=%d, no more intersection.\n",
-//					first_bit, scmd_end_bit);
+	int first_bit, next_zero_bit;
+	uint64_t offset;
+	uint64_t intersection;
+	struct bio *split;
+	unsigned int msb_bitmap_size = data->range_bitmap_size;
+	struct bio_set *split_bioset = data->dev->split_bioset;
+	bool intersect_happened = false;
+
+	struct bio *usr_bio = req->usr_bio;
+
+	int bio_end_sect_bit = lba2bit(range, bio_end_sector(usr_bio) - 1); //the last bit covered by bio
+
+	while(1){ //is it a good idea ? It is!
+		int bio_first_sect_bit = lba2bit(range, bio_first_sector(usr_bio));
+
+		pr_debug("Intersect bio=%p first_sect=%lu, len=%d with range=%p start_lba_main=%llu\n",
+				usr_bio, bio_first_sector(usr_bio), bio_sectors(usr_bio), range, range->start_lba_main);
+
+		first_bit = find_next_bit(range->bitmap, msb_bitmap_size, bio_first_sect_bit);
+		next_zero_bit = find_next_zero_bit(range->bitmap, msb_bitmap_size, first_bit);
+
+		if(next_zero_bit != data->range_size_sectors){
+			next_zero_bit--; //if we  are still not in the end of the mask
+		}
+
+		pr_debug("bio_first_sect_bit=%d, bio_end_sect_bit=%d, in range first_bit=%d, last_bit=%d\n",
+				bio_first_sect_bit, bio_end_sect_bit, first_bit, next_zero_bit);
+
+		/* Break point  - there are no more intersections
+		 * scmd       |------|
+		 * range               |------
+		 */
+		if(first_bit > bio_end_sect_bit){
+			//this means that the last subcommand in the list is not intersected with any bits in range
+			//hence it is command to main and could be cached (TODO: consider read caching for bio)
+			pr_debug("First found set bit =%d  > scmd->end bit=%d, no more intersection.\n",
+					first_bit, bio_end_sect_bit);
 //			if((atomic_read(&data->num_caching_cmd) < MSB_MAX_CACHING_CMD) && read_caching_enabled){
 //				__mark_scmd_for_caching(scmd, range);
 //			}
-//			break;
-//		}
-//
-//		/* First case of intersection
-//		 * scmd       |----------
-//		 * range           |---------
-//		 * new scmd   |----| (to main) - will be cached because range is set in priv
-//		 */
-//		if(first_bit > scmd_lba_bit){
-//
-//			pr_debug("First case of intersection scmd and range. Insert new scmd to main BEFORE the original scmd.\n");
-//			new_scmd = rvm_scmd_clone(scmd);
-//			if(!new_scmd){
-//				return -ENOMEM;
-//			}
-//			intersection  = (first_bit - scmd_lba_bit) * MSB_BLOCK_SIZE_SECTORS;
-//			new_scmd->len = intersection;
-//			new_scmd->lba = scmd->lba;
-//			scmd->lba += intersection;
-//			scmd->len -= intersection;
-//
-//			list_add_tail(&new_scmd->list, &scmd->list);
-//
+			break;
+		}
+
+		intersect_happened = true;
+		/* First case of intersection
+		 * bio        |----------
+		 * range           |---------
+		 * new bio    |----| (to main) - will be cached because range is set in priv
+		 */
+		if(first_bit > bio_first_sect_bit){
+
+			pr_debug("First case of intersection bio and range. Send split bio to main.\n");
+
+			intersection  = (first_bit - bio_first_sect_bit) * MSB_BLOCK_SIZE_SECTORS;
+			split = bio_split(usr_bio, intersection, GFP_NOIO, split_bioset);
+			if(!split){
+				pr_debug("Cannot split\n");
+				req->err = -ENOMEM;
+				__req_put(req);
+			}
+			else{
+				bio_chain(split, usr_bio);
+				split->bi_bdev = data->dev->main_bdev;
+
+				pr_debug("split_bio(%p), bdev=%s, first_sector=%lu, size=%d\n",
+						split, split->bi_bdev->bd_disk->disk_name, bio_first_sector(split), bio_sectors(split));
+				submit_bio(split);
+			}
+
 //			if((atomic_read(&data->num_caching_cmd) < MSB_MAX_CACHING_CMD) && read_caching_enabled){
 //				__mark_scmd_for_caching(new_scmd, range);
 //			}
-//			continue;
-//		}
-//
-//		/* Second case of intersection
-//		 * scmd      |-------
-//		 * range  |--------------
-//		 */
-//		if(first_bit <= scmd_lba_bit){
-//
-//			pr_debug("Second case of intersection. Redirect current scmd.\n");
-//			offset = scmd->lba - range->start_lba_main;
-//
-//			if(scmd_end_bit > next_zero_bit){
-//				/*
-//				 * scmd           |--------|
-//				 * range     |-------|
-//				 * new_scmd       |--| (to aux)
-//				 */
-//
-//				pr_debug("Not full scmd covered by range. Insert new scmd BEFORE the original scmd. Continue redirecting....\n");
-//
-//				new_scmd = rvm_scmd_clone(scmd);
-//				if(!new_scmd){
-//					return -ENOMEM;
-//				}
-//				intersection = bit2lba(range, next_zero_bit + 1) - scmd->lba;
-//
-//				new_scmd->lba = range->start_lba_aux + offset;
-//				new_scmd->len = intersection;
-//				new_scmd->vol = data->aux_vol;
-//
-//				pr_debug("Add new scmd =%p to aux_vol for range=%p and increase ref_cnt\n", new_scmd, range);
+			continue;
+		}
+
+		/* Second case of intersection
+		 * bio        |-------
+		 * range  |--------------
+		 */
+		if(first_bit <= bio_first_sect_bit){
+
+			pr_debug("Second case of intersection. Redirect current bio.\n");
+			offset = bio_first_sector(usr_bio) - range->start_lba_main;
+
+			if(bio_end_sect_bit > next_zero_bit){
+				/*
+				 * bio            |--------|
+				 * range     |-------|
+				 * new bio        |--| (to aux)
+				 */
+
+				pr_debug("Not full bio covered by range. Insert new split bio . Continue redirecting....\n");
+
+				intersection = bit2lba(range, next_zero_bit + 1) - bio_first_sector(usr_bio);
+				split = bio_split(usr_bio, intersection, GFP_NOIO, split_bioset);
+				if(!split){
+					pr_debug("Cannot split\n");
+					req->err = -ENOMEM;
+					__req_put(req);
+				}
+				else{
+					split->bi_bdev = data->dev->aux_bdev;
+					split->bi_iter.bi_sector = range->start_lba_aux + offset;
+
+					bio_chain(split, usr_bio);
+					pr_debug("split_bio(%p), bdev=%s, first_sector=%lu, size=%d\n",
+							split, split->bi_bdev->bd_disk->disk_name, bio_first_sector(split), bio_sectors(split));
+					submit_bio(split);
+				}
+
+				pr_debug("Add new split bio =%p to aux_vol for range=%p and increase ref_cnt\n", split, range);
 //				new_scmd->priv = &range->scpriv; //
 //				atomic_inc(&range->ref_cnt);
 //			    pr_debug("For range=%p ref_cnt =%d\n",
 //			    		range, atomic_read(&range->ref_cnt));
-//				scmd->lba += intersection;
-//				scmd->len -= intersection;
-//
-//				list_add_tail(&new_scmd->list, &scmd->list);
-//				continue;
-//			}
-//
-//			else {//scmd_end_bit <= last_bit
-//				pr_debug("Full scmd=%p covered by range=%p. Redirect scmd, and break.\n", scmd, range);
-//
-//				scmd->lba = range->start_lba_aux + offset;
-//				scmd->vol = data->aux_vol;
-//
+				continue;
+			}
+
+			else {//bio_end_sect_bit <= last_bit
+				pr_debug("Full bio=%p covered by range=%p. Redirect bio, and break.\n", usr_bio, range);
+
+				usr_bio->bi_iter.bi_sector = range->start_lba_aux + offset;
+				usr_bio->bi_bdev = data->dev->aux_bdev;
+
 //				scmd->priv = &range->scpriv; //
 //				atomic_inc(&range->ref_cnt);
 //			    pr_debug("For range=%p ref_cnt =%d\n",
 //			    		range, atomic_read(&range->ref_cnt));
-//				return 0;
-//			}
-//		}
-//	}
+				return 0;
+			}
+		}
+	}
+
+	if(intersect_happened){
+		atomic_inc(&range->ref_cnt);
+	}
+
 	return 0;
 }

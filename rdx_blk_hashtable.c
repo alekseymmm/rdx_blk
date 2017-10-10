@@ -11,9 +11,11 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/hash.h>
-#include "linux/fs.h"
+#include <linux/fs.h>
+#include <linux/vmalloc.h>
 
 #include "rdx_blk.h"
+#include "rdx_blk_hashtable.h"
 
 //it is important that for sequential keys hash function returns sequential hashes
 inline uint64_t msb_hash(struct msb_hashtable *ht, uint64_t key){
@@ -50,7 +52,7 @@ struct msb_hashtable *msb_hashtable_create(struct msb_data *data)
     /* Allocating buckets */
     ht->buckets = vzalloc(ht->buckets_num * sizeof(struct msb_bucket));
     if (!ht->buckets) {
-        rdx_error("Could not allocate memory for the hash buckets.\n");
+        pr_debug("Could not allocate memory for the hash buckets.\n");
         goto error;
     }
 
@@ -84,6 +86,7 @@ void msb_hashtable_delete(struct msb_hashtable *ht)
 void msb_lock_buckets(struct msb_hashtable *ht, uint64_t lba, uint32_t len, int lock_type){
 	uint64_t start_lba_main = 0;
 	uint64_t hash = 0;
+	struct msb_data *data = ht->data;
 
 	uint32_t slen; /* command length fitting in a range */
 	uint64_t offset; /*offset in current range*/
@@ -91,10 +94,10 @@ void msb_lock_buckets(struct msb_hashtable *ht, uint64_t lba, uint32_t len, int 
 
 	do{
 
-		offset = lba % ht->data->range_size_sectors;
-		slen = ht->data>range_size_sectors - offset;
+		offset = lba % data->range_size_sectors;
+		slen = data->range_size_sectors - offset;
 
-		start_lba_main = get_start_lba(lba);
+		start_lba_main = get_start_lba(lba, data);
 		hash = msb_hash(ht, start_lba_main);
 
 		pr_debug("For lba=%llu len=%d slen=%d (start_lba_main=%llu) offset%llu: lock bucket number=%llu\n",
@@ -113,16 +116,17 @@ void msb_lock_buckets(struct msb_hashtable *ht, uint64_t lba, uint32_t len, int 
 void msb_unlock_buckets(struct msb_hashtable *ht, uint64_t lba, uint32_t len, int unlock_type){
 	uint64_t start_lba_main = 0;
 	uint64_t hash = 0;
+	struct msb_data *data = ht->data;
 
 	uint32_t slen; /* command length fitting in a range */
 	uint64_t offset; /*offset in current range*/
 	uint64_t end_lba = lba + len; //when to stop
 
 	do{
-		offset = lba % msb_range_size_sectors;
-		slen = msb_range_size_sectors - offset;
+		offset = lba % data->range_size_sectors;
+		slen = data->range_size_sectors - offset;
 
-		start_lba_main = get_start_lba(lba);
+		start_lba_main = get_start_lba(lba, data);
 		hash = msb_hash(ht, start_lba_main);
 
 		pr_debug("For lba=%llu len=%d slen=%d (start_lba_main=%llu) offset%llu: unlock bucket number=%llu\n",
@@ -150,12 +154,12 @@ int msb_hashtable_add_range(struct msb_hashtable  *ht, struct msb_range *range)
     struct msb_bucket *bucket;
 
     if (unlikely(!ht)) {
-        rdx_error("Hashtable is (NULL).\n");
+        pr_debug("Hashtable is (NULL).\n");
         return -EINVAL;
     }
 
     if (unlikely(!range)) {
-        rdx_error("Entry is (NULL).\n");
+        pr_debug("Entry is (NULL).\n");
         return -EINVAL;
     }
 
@@ -185,11 +189,11 @@ int msb_hashtable_del_range(struct msb_hashtable* ht, struct msb_range* range) {
 	struct msb_bucket* bucket;
 
 	if (unlikely(!ht)) {
-		rdx_error("Hashtable is (NULL).\n");
+		pr_debug("Hashtable is (NULL).\n");
 		return -EINVAL;
 	}
 	if (unlikely(!range)) {
-		rdx_error("Entry is (NULL).\n");
+		pr_debug("Entry is (NULL).\n");
 		return -EINVAL;
 	}
 	hashed_key = msb_hash(ht, range->start_lba_main);
@@ -209,7 +213,7 @@ struct msb_range *msb_hashtable_get_range(struct msb_hashtable *ht, uint64_t key
 	struct msb_range *cur_range = NULL;
 
 	if (unlikely(!ht)) {
-		rdx_error("Hashtable is (NULL).\n");
+		pr_debug("Hashtable is (NULL).\n");
 		return NULL;
 	}
 

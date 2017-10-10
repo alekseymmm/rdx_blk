@@ -7,6 +7,14 @@
 
 #ifndef RDX_BLK_H_
 #define RDX_BLK_H_
+#include <linux/module.h>
+
+#include <linux/moduleparam.h>
+#include <linux/sched.h>
+#include <linux/fs.h>
+#include <linux/blkdev.h>
+#include <linux/init.h>
+#include <linux/slab.h>
 
 #include <linux/list.h>
 #include <linux/rbtree.h>
@@ -14,6 +22,20 @@
 #include <linux/types.h>
 
 #define RDX_BLK_MIN_POOL_PAGES 128
+#define MSB_DEFAULT_RANGE_SIZE_SECTORS (20 * 1024 * 2)
+#define MSB_DEFAULT_MAX_NUM_EVICT_CMD (8)
+#define MSB_BLOCK_SIZE_SECTORS (8)
+
+#define MSB_HT_BUCKET_SHIFT  (24)
+
+extern struct rdx_blk *rdx_blk;
+extern struct kmem_cache *rdx_request_cachep;
+extern struct msb_data *rdx_msb_data;
+
+extern struct kmem_cache *range_cachep;
+
+/** MSB workqueue */
+extern struct workqueue_struct *msb_wq;
 
 struct rdx_request{
 	struct rdx_blk 	*dev;
@@ -35,18 +57,14 @@ struct rdx_blk {
 	char 					*name;
 	sector_t 				sectors;
 	struct bio_set 			*split_bioset;
+	struct msb_data 		*data;
 };
 
 struct msb_data {
-    uint32_t magic;                              /**< Magic value */
-    struct rvm_volume_filter    *vf;             /**< Volume filter */
-    struct rvm_volume_service   *vs;             /**< Volume service */
-    struct rvm_volume           *main_vol;       /**< Main volume */
-    struct rvm_volume           *aux_vol;        /**< Main volume */
-
-    atomic_t                    ref_cnt;         /**< Reference counter */
-    struct list_head            list;            /**< Entry of struct tier_data list */
-
+	uint64_t 					range_size_sectors;
+	uint64_t					max_num_evict_cmd;
+	uint64_t					range_bitmap_size;
+	struct rdx_blk 				*dev; 			 /** rdx_blk parent device */
     rwlock_t                	tree_lock;       /**< Ranges tree lock */
     struct msb_hashtable		*ht;			 /**< Hashtable of ranges */
     struct rb_root				ranges;			 /**< RB tree to store ranges */
@@ -65,10 +83,57 @@ struct msb_data {
     atomic_t 					num_caching_cmd;
 };
 
-extern struct rdx_blk *rdx_blk;
-extern struct kmem_cache *rdx_request_cachep;
-extern struct msb_data *rdx_msb_data;
+struct msb_range{
+	uint64_t 			start_lba_main;
+	uint64_t			start_lba_aux;
 
-#define bio_first_sector(bio) (bio_end_sector(bio) - bio_sectors(bio))
+	//static bitmap is better and faster!
+	//DECLARE_BITMAP(bitmap, MSB_BITMAP_SIZE);
+	unsigned long		*bitmap;
+
+	rwlock_t			lock;
+	struct rb_node		tree_node;
+	struct hlist_node	ht_node;
+	struct msb_data 	*data;
+	atomic_t 			ref_cnt;
+	//struct rvm_subcommand_private scpriv;       /**< Subcommand private*/
+};
+/**
+ * A hashtable bucket.
+ * The ranges in the bucket are ordered by the key (LBA on the start_lba_main.)
+ */
+struct msb_bucket {
+    struct hlist_head        head;              /**< The head of a hlist of entries */
+    rwlock_t 				 lock;				/**< lock bucket */
+};
+
+/**
+ * A hashtable for msb entries. The LBA on the start main value is used as the key.
+ */
+struct msb_hashtable {
+    size_t                  buckets_num;        /**< Number of buckets in the table */
+    struct msb_bucket       *buckets;           /**< The array of buckets */
+    rwlock_t                lock;               /**< The table lock */
+    uint64_t                hashmask;           /**< The hash mask */
+    struct msb_data         *data;              /**< The private msb plugin data pointer */
+};
+
+enum rp_msb_data_flags {
+    MSB_FLAG_FULL				= 0,        /**< This flag is set when  */
+    MSB_FLAG_RESTORING			= 1,        /**< This flag is set when  */
+    MSB_FLAG_DELETING    		= 2,
+	MSB_EVICTION_IN_PROGRESS	= 3,        /** Set when data eviction in progress*/
+	MSB_CANCEL_EVICTION			= 4,
+};
+
+enum rp_msb_range_flags {
+	MSB_RANGE_EVICTING			= 0,
+};
+
+#define bio_first_sector(bio) ((bio_end_sector(bio) - bio_sectors(bio)))
+
+static inline uint64_t get_start_lba(uint64_t x, struct msb_data *data){
+	return (x - (x % data->range_size_sectors));
+}
 
 #endif /* RDX_BLK_H_ */

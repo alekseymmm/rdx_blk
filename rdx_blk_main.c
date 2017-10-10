@@ -8,6 +8,7 @@
 #include <linux/slab.h>
 
 #include "rdx_blk.h"
+#include "rdx_blk_data.h"
 #include "rdx_blk_request.h"
 
 
@@ -19,9 +20,10 @@ static int rdx_minor = 1;
 static int blocksize = 4096;
 
 struct rdx_blk *rdx_blk = NULL;
-struct msb_data *rdx_msb_data = NULL;
 
 struct kmem_cache *rdx_request_cachep = NULL;
+struct kmem_cache *range_cachep = NULL;
+struct workqueue_struct *msb_wq = NULL;
 
 static char *main_bdev_path = "/dev/md/storage_14";
 module_param(main_bdev_path, charp, 0000);
@@ -68,6 +70,10 @@ static void rdx_destroy_dev(void)
 		kfree(rdx_blk->name);
 	}
 
+	if(rdx_blk->data){
+		__free_data(rdx_blk->data);
+	}
+
 	if(rdx_blk->split_bioset){
 		bioset_free(rdx_blk->split_bioset);
 	}
@@ -97,7 +103,6 @@ static void rdx_destroy_dev(void)
 	rdx_blk = NULL;
 	pr_debug("Device %s destroyed \n", RDX_BLKDEV_NAME);
 }
-
 
 static int rdx_blk_create_dev(void)
 {
@@ -177,7 +182,13 @@ static int rdx_blk_create_dev(void)
 	add_disk(gd);
 	pr_debug("Disk %s added on node %d, rdx_blk=%p\n", gd->disk_name, home_node, rdx_blk);
 
-
+	rdx_blk->data = __alloc_data(rdx_blk, msb_range_size_sectors, max_num_evict_cmd);
+	if(!rdx_blk->data){
+		ret = -ENOMEM;
+		pr_debug("Cannot allocate msb_data for %s\n", RDX_BLKDEV_NAME);
+		goto out;
+	}
+	pr_debug("msb_data allocated\n");
 
 	return 0;
 
@@ -201,6 +212,15 @@ static int __init rdx_blk_init(void)
         ret = -ENOMEM;
     }
 
+    range_cachep = kmem_cache_create("range_cachep", sizeof(struct rdx_request),
+    		0, 0,  NULL);
+
+    if (!range_cachep) {
+        pr_debug( "Could not allocate range_cachep!\n" ) ;
+        kmem_cache_destroy(rdx_request_cachep);
+        ret = -ENOMEM;
+    }
+
 	rdx_major = register_blkdev(0, RDX_BLKDEV_NAME);
 	if(rdx_major < 0){
 		return rdx_major;
@@ -218,6 +238,10 @@ static void __exit rdx_blk_exit(void)
 
     if (rdx_request_cachep){
         kmem_cache_destroy(rdx_request_cachep);
+    }
+
+    if (range_cachep){
+        kmem_cache_destroy(range_cachep);
     }
 
 	unregister_blkdev(rdx_major, RDX_BLKDEV_NAME);

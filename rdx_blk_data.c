@@ -6,9 +6,17 @@
  */
 
 #include <linux/vmalloc.h>
+#include <linux/moduleparam.h>
+#include <linux/sched.h>
+#include <linux/fs.h>
+#include <linux/blkdev.h>
+#include <linux/init.h>
+#include <linux/slab.h>
 
 #include "rdx_blk.h"
 #include "rdx_blk_hashtable.h"
+#include "rdx_blk_range.h"
+
 
 struct msb_data *__alloc_data(struct rdx_blk *dev, uint64_t range_size_sectors, uint64_t max_num_evict_cmd)
 {

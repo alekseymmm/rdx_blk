@@ -10,6 +10,7 @@
 
 #include "rdx_blk.h"
 #include "rdx_blk_request.h"
+#include "rdx_blk_filter.h"
 
 void __req_put(struct rdx_request *req)
 {

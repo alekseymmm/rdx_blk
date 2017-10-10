@@ -363,7 +363,6 @@ int msb_intersect_range(struct msb_data *data, struct msb_range *range, struct r
 			}
 		}
 	}
-
 	if(intersect_happened){
 		atomic_inc(&range->ref_cnt);
 	}

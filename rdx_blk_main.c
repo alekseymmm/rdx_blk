@@ -19,6 +19,8 @@ static int rdx_major;
 static int rdx_minor = 1;
 static int blocksize = 4096;
 
+bool read_caching_enabled = false;
+
 struct rdx_blk *rdx_blk = NULL;
 
 struct kmem_cache *rdx_request_cachep = NULL;

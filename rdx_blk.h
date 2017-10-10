@@ -37,6 +37,8 @@ extern struct kmem_cache *range_cachep;
 /** MSB workqueue */
 extern struct workqueue_struct *msb_wq;
 
+extern bool  read_caching_enabled;
+
 struct rdx_request{
 	struct rdx_blk 	*dev;
 	struct bio 		*usr_bio;

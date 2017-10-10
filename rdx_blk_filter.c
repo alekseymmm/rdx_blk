@@ -177,7 +177,7 @@ int msb_write_filter(struct msb_data *data, struct bio *bio)
 		if(!res){
 			//?
 		}
-    }while(split == bio);
+    }while(split != bio);
 
     msb_unlock_buckets(ht, first_sector, sectors, WRITE);
 
@@ -267,19 +267,22 @@ int msb_read_filter(struct msb_data *data, struct bio *bio)
 		}
 
 		req = __create_req(split, data->dev);
+
 		if(req == NULL){
 			pr_debug("cannot allocate req for bio=%p\n", split);
 			bio_io_error(bio);
 			res = -ENOMEM;
 			break;
 		}
-		res = filter_write_req(data, req);
+		printk("for bio=%p created req=%p first_sect=%p, sectors=%p\n",
+						bio, req, req->first_sector, req->sectors);
+		res = filter_read_req(data, req);
 		if(!res){
 			//?
 		}
-	}while(split == bio);
+	}while(split != bio);
 
-	msb_unlock_buckets(ht, first_sector, sectors, WRITE);
+	msb_unlock_buckets(ht, first_sector, sectors, READ);
 
 	pr_debug("OUT: bio=%p, dev=%s, first_sect=%lu, len=%d, \n",
 			bio, bio->bi_bdev->bd_disk->disk_name, bio_first_sector(bio), bio_sectors(bio));

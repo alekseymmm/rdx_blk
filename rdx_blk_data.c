@@ -28,7 +28,7 @@ struct msb_data *__alloc_data(struct rdx_blk *dev, uint64_t range_size_sectors, 
     data = kmalloc(sizeof(*data), GFP_ATOMIC);
     if(!data){
     	pr_debug("Cannot allocate msb_data\n");
-    	goto out_free;
+    	goto free_data;
     }
     data->dev = dev;
     data->range_size_sectors = range_size_sectors;
@@ -60,7 +60,7 @@ struct msb_data *__alloc_data(struct rdx_blk *dev, uint64_t range_size_sectors, 
     data->ht = msb_hashtable_create(data);
     if (!data->ht) {
         pr_debug("Could not create data->ht\n");
-        goto out_free;
+        goto free_data;
     }
     data->ranges = RB_ROOT;
     data->flags = 0;
@@ -73,12 +73,16 @@ struct msb_data *__alloc_data(struct rdx_blk *dev, uint64_t range_size_sectors, 
 
     if(!data->used_ranges_bitmap){
     	pr_debug("Could not allocate bitmap of used ranges\n");
-    	goto out_free;
+    	goto free_ht;
     }
     pr_debug("Num ranges=%llu, size of used_ranges_bitmap = %llu bytes\n",
     		data->num_ranges, sizeof(long) * BITS_TO_LONGS(data->num_ranges));
 
-out_free:
+    return data;
+
+free_ht:
+	msb_hashtable_delete(data->ht);
+free_data:
     kfree(data);
     data = NULL;
 

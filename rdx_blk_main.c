@@ -157,6 +157,14 @@ static int rdx_blk_create_dev(void)
 		goto out;
 	}
 
+	rdx_blk->data = __alloc_data(rdx_blk, msb_range_size_sectors, max_num_evict_cmd);
+	if(!rdx_blk->data){
+		ret = -ENOMEM;
+		pr_debug("Cannot allocate msb_data for %s\n", RDX_BLKDEV_NAME);
+		goto out;
+	}
+	pr_debug("msb_data allocated\n");
+
 	blk_queue_make_request(rdx_blk->queue, rdx_blk_make_request);
 	rdx_blk->queue->queuedata = rdx_blk;
 	blk_queue_logical_block_size(rdx_blk->queue, blocksize);
@@ -181,14 +189,6 @@ static int rdx_blk_create_dev(void)
 
 	add_disk(gd);
 	pr_debug("Disk %s added on node %d, rdx_blk=%p\n", gd->disk_name, home_node, rdx_blk);
-
-	rdx_blk->data = __alloc_data(rdx_blk, msb_range_size_sectors, max_num_evict_cmd);
-	if(!rdx_blk->data){
-		ret = -ENOMEM;
-		pr_debug("Cannot allocate msb_data for %s\n", RDX_BLKDEV_NAME);
-		goto out;
-	}
-	pr_debug("msb_data allocated\n");
 
 	return 0;
 

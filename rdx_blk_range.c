@@ -366,10 +366,13 @@ int msb_intersect_range(struct msb_data *data, struct msb_range *range, struct r
 	}
 
 	//all splitted parts are submitted  then submit usr bio itself
-	submit_bio(usr_bio);
 	if(intersect_happened){
 		atomic_inc(&range->ref_cnt);
+		pr_debug("Intersection happend , for range=%p ref_cnt=%d\n",
+				range, atomic_read(&range->ref_cnt));
 	}
+	submit_bio(usr_bio);
+
 
 	return 0;
 }

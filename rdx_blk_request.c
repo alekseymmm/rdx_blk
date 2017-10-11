@@ -26,11 +26,14 @@ void __req_put(struct rdx_request *req)
 		usr_bio->bi_error = req->err;
 
 		pr_debug("For req=%p restore usr_bio=%p parameters and end it\n", req, usr_bio);
-		bio_endio(usr_bio);
+
 		if(req->range != NULL){
 			//release range if it were intersections
 			atomic_dec(&req->range->ref_cnt);
+			pr_debug("request %p ended for range=%p ref_cnt=%d\n",
+					req, req->range, atomic_read(&req->range->ref_cnt));
 		}
+		bio_endio(usr_bio);
 		kmem_cache_free(rdx_request_cachep, req);
 	}
 }
@@ -81,7 +84,6 @@ static void __start_transfer(struct rdx_request *req)
 // request covers bio to only one range
 blk_qc_t rdx_blk_make_request(struct request_queue *q, struct bio *bio){
 	struct rdx_blk *dev = q->queuedata;
-	struct rdx_request *req;
 
 	if (bio_sectors(bio) == 0) {
 		bio->bi_error = 0;

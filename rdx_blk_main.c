@@ -10,6 +10,7 @@
 #include "rdx_blk.h"
 #include "rdx_blk_data.h"
 #include "rdx_blk_request.h"
+#include "rdx_blk_debug.h"
 
 
 char RDX_BLKDEV_NAME[32] = "rdx_blk";
@@ -74,10 +75,12 @@ static void rdx_destroy_dev(void)
 
 	if(rdx_blk->data){
 		__free_data(rdx_blk->data);
+		pr_debug("For dev %s msb_data freed\n", RDX_BLKDEV_NAME);
 	}
 
 	if(rdx_blk->split_bioset){
 		bioset_free(rdx_blk->split_bioset);
+		pr_debug("For dev %s bioset freed\n", RDX_BLKDEV_NAME);
 	}
 
 	if(rdx_blk->gd){
@@ -254,11 +257,23 @@ int __set_cur_cmd(const char *str, struct kernel_param *kp){
 	pr_debug("Got command \"%s\" in rp_msb control\n", str);
 	if(!strcmp(str, "create\n")){
 		rdx_blk_create_dev();
+		return 0;
 	}
 	if(!strcmp(str, "destroy\n")){
 		rdx_destroy_dev();
+		return 0;
 	}
-
+	if(!strcmp(str, "print_ranges\n")){
+		if(rdx_blk)
+			print_all_ranges(rdx_blk->data);
+		return 0;
+	}
+	if(!strcmp(str, "used_ranges\n")){
+		if(rdx_blk){
+			print_used_ranges(rdx_blk->data);
+		}
+		return 0;
+	}
 	return 0;
 }
 

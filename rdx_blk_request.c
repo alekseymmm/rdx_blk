@@ -27,7 +27,10 @@ void __req_put(struct rdx_request *req)
 
 		pr_debug("For req=%p restore usr_bio=%p parameters and end it\n", req, usr_bio);
 		bio_endio(usr_bio);
-		atomic_dec(&req->range->ref_cnt); //release range
+		if(req->range != NULL){
+			//release range if it were intersections
+			atomic_dec(&req->range->ref_cnt);
+		}
 		kmem_cache_free(rdx_request_cachep, req);
 	}
 }

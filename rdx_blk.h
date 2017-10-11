@@ -7,6 +7,7 @@
 
 #ifndef RDX_BLK_H_
 #define RDX_BLK_H_
+
 #include <linux/module.h>
 
 #include <linux/moduleparam.h>

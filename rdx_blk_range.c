@@ -266,6 +266,7 @@ int msb_intersect_range(struct msb_data *data, struct msb_range *range, struct r
 		if(first_bit > bio_end_sect_bit){
 			//this means that the last subcommand in the list is not intersected with any bits in range
 			//hence it is command to main and could be cached (TODO: consider read caching for bio)
+			usr_bio->bi_bdev = data->dev->main_bdev;
 			pr_debug("First found set bit =%d  > scmd->end bit=%d, no more intersection.\n",
 					first_bit, bio_end_sect_bit);
 //			if((atomic_read(&data->num_caching_cmd) < MSB_MAX_CACHING_CMD) && read_caching_enabled){
@@ -363,6 +364,9 @@ int msb_intersect_range(struct msb_data *data, struct msb_range *range, struct r
 			}
 		}
 	}
+
+	//all splitted parts are submitted  then submit usr bio itself
+	submit_bio(usr_bio);
 	if(intersect_happened){
 		atomic_inc(&range->ref_cnt);
 	}

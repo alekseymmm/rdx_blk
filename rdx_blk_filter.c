@@ -204,14 +204,19 @@ int filter_read_req(struct msb_data *data, struct rdx_request *req){
 	start_lba_main = get_start_lba(req->first_sector, data);
 	range = msb_hashtable_get_range(data->ht, start_lba_main);
 
+	req->range = range;
 	if(range != NULL){
 		pr_debug("For req=%p, first_sect=%lu, req->sectors=%lu, req->dev=%s found range=%p, start_lba_main=%llu, start_lba_aux=%llu\n",
 				req, req->first_sector, req->sectors, req->dev->name, range, range->start_lba_main, range->start_lba_aux);
+
 		res = __redirect_req(req, range, data);
 	}
 	else {
 		pr_debug("For req=%p, first_sect=%lu, req->sectors=%lu, req->dev=%s there is no range in HT\n",
 				req, req->first_sector, req->sectors, req->dev->name);
+		//no range hence goes to main
+		req->usr_bio->bi_bdev = data->dev->main_bdev;
+		submit_bio(req->usr_bio);
 	}
 	return res;
 }
@@ -274,7 +279,7 @@ int msb_read_filter(struct msb_data *data, struct bio *bio)
 			res = -ENOMEM;
 			break;
 		}
-		printk("for bio=%p created req=%p first_sect=%p, sectors=%p\n",
+		printk("for bio=%p created req=%p first_sect=%lu, sectors=%lu\n",
 						bio, req, req->first_sector, req->sectors);
 		res = filter_read_req(data, req);
 		if(!res){

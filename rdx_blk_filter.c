@@ -29,6 +29,9 @@ int __redirect_req(struct rdx_request *req, struct msb_range *range, struct msb_
 	int res = 0;
 	struct bio *bio = req->usr_bio;
 
+	pr_debug("req=%p, usr_bio=%p, dir=%s, first_sec=%lu, sectors=%lu",
+			req, req->usr_bio, bio_data_dir(bio) == WRITE ? "W" : "R", req->first_sector, req->sectors);
+
 	if(bio_data_dir(bio) == WRITE){
 		write_lock_bh(&range->lock);
 		{
@@ -97,11 +100,11 @@ int filter_write_req(struct msb_data *data, struct rdx_request *req){
 			return res;
 		}
 
-		msb_hashtable_add_range(data->ht, range);
-
 		req->range = range;
 		//redirect bio according to range mapping
 		res = __redirect_req(req, range, data);
+
+		msb_hashtable_add_range(data->ht, range);
 
 		//insert after redirection so that we dont start eviction of this range before actual redirection
 		write_lock_bh(&data->tree_lock);
@@ -155,7 +158,7 @@ int msb_write_filter(struct msb_data *data, struct bio *bio)
     //go through all ranges covered by this bio
     do{
     	offset = bio_first_sector(bio) % msb_range_size_sectors;
-    	slen = msb_range_size_sectors - offset; //sectors fits in current cange
+    	slen = msb_range_size_sectors - offset; //sectors fits in current range
 
     	if(slen < bio_sectors(bio)){
     		split = bio_split(bio, slen, GFP_NOIO, data->dev->split_bioset);
@@ -173,6 +176,8 @@ int msb_write_filter(struct msb_data *data, struct bio *bio)
 			res = -ENOMEM;
 			break;
 		}
+		pr_debug("for bio=%p created req=%p first_sect=%lu, sectors=%lu\n",
+						split, req, req->first_sector, req->sectors);
 		res = filter_write_req(data, req);
 		if(!res){
 			//?
@@ -181,7 +186,7 @@ int msb_write_filter(struct msb_data *data, struct bio *bio)
 
     msb_unlock_buckets(ht, first_sector, sectors, WRITE);
 
-    pr_debug("OUT: bio=%p, dev=%s, first_sect=%lu, len=%d, \n",
+    pr_debug("OUT: bio=%p, dev=%s, first_sect=%lu, len=%d \n",
     		bio, bio->bi_bdev->bd_disk->disk_name, bio_first_sector(bio), bio_sectors(bio));
     return res;
 }

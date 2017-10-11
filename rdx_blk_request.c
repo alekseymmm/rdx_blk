@@ -83,7 +83,7 @@ blk_qc_t rdx_blk_make_request(struct request_queue *q, struct bio *bio){
 	struct rdx_blk *dev = q->queuedata;
 	struct rdx_request *req;
 
-	if (!bio_sectors(bio)) {
+	if (bio_sectors(bio) == 0) {
 		bio->bi_error = 0;
 		bio_endio(bio);
 		return BLK_QC_T_NONE;
@@ -119,6 +119,8 @@ struct rdx_request *__create_req(struct bio *bio, struct rdx_blk *dev){
 	req->usr_bio_private = bio->bi_private;
 	req->__usr_bio_end_io = bio->bi_end_io;
 
+	bio->bi_private = req;
+	bio->bi_end_io = __end_transfer;
 	atomic_set(&req->ref_cnt, 1);
 	return req;
 }

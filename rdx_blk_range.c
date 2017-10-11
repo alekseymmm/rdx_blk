@@ -241,7 +241,7 @@ int msb_intersect_range(struct msb_data *data, struct msb_range *range, struct r
 
 	struct bio *usr_bio = req->usr_bio;
 
-	int bio_end_sect_bit = lba2bit(range, bio_end_sector(usr_bio) - 1); //the last bit covered by bio
+	int bio_end_sect_bit = lba2bit(range, bio_end_sector(usr_bio)) - 1; //the last bit covered by bio
 
 	while(1){ //is it a good idea ? It is!
 		int bio_first_sect_bit = lba2bit(range, bio_first_sector(usr_bio));

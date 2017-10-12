@@ -43,7 +43,34 @@ void __req_put(struct rdx_request *req)
 		if (atomic_dec_and_test(&req->ref_cnt)) {
 			struct bio *usr_bio = req->usr_bio;
 
-			trace_block_bio_complete(bdev_get_queue(usr_bio->bi_bdev), usr_bio, req->err);
+			//trace_block_bio_complete(bdev_get_queue(usr_bio->bi_bdev), usr_bio, req->err);
+
+			pr_debug("req=%p bio=%p finished. bi_iter: bi_sector=%lu, bi_size=%d, bi_idx=%d, bi_bvec_done=%d\n",
+					req, usr_bio, usr_bio->bi_iter.bi_sector, usr_bio->bi_iter.bi_size,
+					usr_bio->bi_iter.bi_idx, usr_bio->bi_iter.bi_bvec_done);
+
+			pr_debug("Remap bio=%p to dev=%s\n",
+					usr_bio, req->dev->aux_bdev->bd_disk->disk_name);
+
+			usr_bio->bi_bdev = req->dev->main_bdev;
+			usr_bio->bi_iter.bi_sector = 8;
+			usr_bio->bi_iter.bi_size = req->sectors;
+			usr_bio->bi_iter.bi_idx = 0;
+			usr_bio->bi_opf = REQ_OP_WRITE;
+
+			req->type = RDX_REQ_EVICT_W;
+
+			atomic_set(&req->ref_cnt, 1);
+
+			submit_bio(usr_bio);
+		}
+
+		break;
+	case RDX_REQ_EVICT_W:
+		if (atomic_dec_and_test(&req->ref_cnt)) {
+			struct bio *usr_bio = req->usr_bio;
+
+			//trace_block_bio_complete(bdev_get_queue(usr_bio->bi_bdev), usr_bio, req->err);
 
 			pr_debug("req=%p bio=%p finished. bi_iter: bi_sector=%lu, bi_size=%d, bi_idx=%d, bi_bvec_done=%d\n",
 					req, usr_bio, usr_bio->bi_iter.bi_sector, usr_bio->bi_iter.bi_size,
@@ -61,19 +88,14 @@ void __req_put(struct rdx_request *req)
 //				pr_debug("request %p ended for range=%p ref_cnt=%d\n",
 //						req, req->range, atomic_read(&req->range->ref_cnt));
 //			}
-			bio_endio(usr_bio);
+			bio_put(usr_bio);
 			if(req->buf){
 				kfree(req->buf);
 			}
 			kmem_cache_free(rdx_request_cachep, req);
 		}
 		break;
-	case RDX_REQ_EVICT_W:
-		break;
 	}
-
-
-
 }
 
 static void __end_transfer(struct bio *bio)

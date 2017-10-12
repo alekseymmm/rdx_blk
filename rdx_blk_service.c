@@ -60,7 +60,7 @@ int generate_bio_test(struct rdx_blk *dev){
 		xferred += len;
 	}
 
-	pr_debug("Generate bio=%p, req=%p, dev=%s, first_sect=%lu, sectors=%lu\n",
+	pr_debug("Generate bio=%p, req=%p, dev=%s, first_sect=%lu, sectors=%d\n",
 			bio, req, bio->bi_bdev->bd_disk->disk_name, bio_first_sector(bio), bio_sectors(bio));
 	submit_bio(bio);
 	return 0;

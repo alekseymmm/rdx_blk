@@ -41,12 +41,14 @@ int __redirect_req(struct rdx_request *req, struct msb_range *range, struct msb_
 						range, range->start_lba_main, bio);
 				res = -EBUSY;
 			} else { //range is ok then correct bits in  this range and redirect bio
+				//TODO : move this code to msb_intersect range
 				msb_setbits_in_range(range, bio_first_sector(bio), bio_sectors(bio));
 
 				offset = bio_first_sector(bio) - range->start_lba_main;
 				bio->bi_iter.bi_sector = range->start_lba_aux + offset;
 
 				bio->bi_bdev = data->dev->aux_bdev;
+				req->range = range;
 				submit_bio(bio);
 
 			    pr_debug("For range=%p ref_cnt=%d\n",
@@ -209,7 +211,6 @@ int filter_read_req(struct msb_data *data, struct rdx_request *req){
 	start_lba_main = get_start_lba(req->first_sector, data);
 	range = msb_hashtable_get_range(data->ht, start_lba_main);
 
-	req->range = range;
 	if(range != NULL){
 		pr_debug("For req=%p, first_sect=%lu, req->sectors=%lu, req->dev=%s found range=%p, start_lba_main=%llu, start_lba_aux=%llu\n",
 				req, req->first_sector, req->sectors, req->dev->name, range, range->start_lba_main, range->start_lba_aux);

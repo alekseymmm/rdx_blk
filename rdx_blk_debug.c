@@ -14,8 +14,8 @@ void __print_range(struct msb_range *range, char *buf){
 
 	bitmap_print_to_pagebuf(true, buf, range->bitmap, range->data->range_bitmap_size);
 
-	pr_debug("range=%p start_lba_main=%llu, start_lba_aux=%llu, set bits in bitmap:[%s], ref_cnt=%d\n",
-			range, range->start_lba_main, range->start_lba_aux, buf, atomic_read(&range->ref_cnt));
+	pr_debug("range=%p start_lba_main=%llu, start_lba_aux=%llu, ref_cnt=%d set bits in bitmap: %s",
+			range, range->start_lba_main, range->start_lba_aux, atomic_read(&range->ref_cnt), buf);
 }
 
 void print_all_ranges(struct msb_data* data){
@@ -54,7 +54,7 @@ void print_used_ranges(struct msb_data* data){
 	if(buf){
 		read_lock_bh(&data->used_ranges_lock);
 		bitmap_print_to_pagebuf(true, buf, data->used_ranges_bitmap,data->num_ranges);
-		pr_debug("num_ranges=%llu, set bits in bitmap:[%s]\n",
+		pr_debug("num_ranges=%llu, set bits in bitmap: %s \n",
 				data->num_ranges, buf);
 		read_unlock_bh(&data->used_ranges_lock);
 		kfree(buf);

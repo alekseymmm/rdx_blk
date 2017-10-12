@@ -16,6 +16,7 @@
 #include <linux/types.h>
 #include <linux/slab.h>
 #include <linux/bitmap.h>
+#include <linux/rwlock.h>
 #include <linux/bio.h>
 
 #include "rdx_blk.h"
@@ -171,7 +172,7 @@ int msb_write_filter(struct msb_data *data, struct bio *bio)
     		split = bio;
     	}
 
-    	req = __create_req(split, data->dev);
+    	req = __create_req(split, data->dev, RDX_REQ_RW);
 		if(req == NULL){
 			pr_debug("cannot allocate req for bio=%p\n", split);
 			bio_io_error(bio);
@@ -279,8 +280,7 @@ int msb_read_filter(struct msb_data *data, struct bio *bio)
 			split = bio;
 		}
 
-		req = __create_req(split, data->dev);
-
+		req = __create_req(split, data->dev, RDX_REQ_RW);
 		if(req == NULL){
 			pr_debug("cannot allocate req for bio=%p\n", split);
 			bio_io_error(bio);

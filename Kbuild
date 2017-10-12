@@ -6,6 +6,7 @@ rdx_blk-y := rdx_blk_main.o \
              rdx_blk_hashtable.o \
              rdx_blk_range.o \
              rdx_blk_filter.o \
+             rdx_blk_service.o \
              rdx_blk_debug.o
          
 obj-m := rdx_blk.o 

@@ -1,5 +1,5 @@
 #include <linux/module.h>
-
+#include <linux/kernel.h>
 #include <linux/moduleparam.h>
 #include <linux/sched.h>
 #include <linux/fs.h>
@@ -11,6 +11,7 @@
 #include "rdx_blk_data.h"
 #include "rdx_blk_request.h"
 #include "rdx_blk_debug.h"
+#include "rdx_blk_service.h"
 
 
 char RDX_BLKDEV_NAME[32] = "rdx_blk";
@@ -276,6 +277,11 @@ int __set_cur_cmd(const char *str, struct kernel_param *kp){
 			print_used_ranges(rdx_blk->data);
 		}
 		return 0;
+	}
+	if(!strcmp(str, "test\n")){
+		if(rdx_blk){
+			generate_bio_test(rdx_blk);
+		}
 	}
 	return 0;
 }

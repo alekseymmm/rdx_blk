@@ -40,17 +40,25 @@ extern struct workqueue_struct *msb_wq;
 
 extern bool  read_caching_enabled;
 
+enum rdx_req_type {
+	RDX_REQ_RW					= 0,
+	RDX_REQ_EVICT_R				= 1,
+	RDX_REQ_EVICT_W				= 2,
+};
+
 struct rdx_request{
-	struct rdx_blk 	*dev;
-	struct bio 		*usr_bio;
-	atomic_t 		ref_cnt;
-	unsigned int	rw;
-	sector_t 		first_sector;
-	sector_t 		sectors;
-	int 			err;
-	bio_end_io_t	*__usr_bio_end_io;
-	void 			*usr_bio_private;
-	struct msb_range *range;
+	struct rdx_blk		*dev;
+	struct bio 			*usr_bio;
+	atomic_t 			ref_cnt;
+	unsigned int		rw;
+	sector_t 			first_sector;
+	sector_t 			sectors;
+	int 				err;
+	bio_end_io_t		*__usr_bio_end_io;
+	void 				*usr_bio_private;
+	struct msb_range	*range;
+	enum rdx_req_type 	type;
+	char  				*buf;
 };
 
 struct rdx_blk {
@@ -133,6 +141,8 @@ enum rp_msb_data_flags {
 enum rp_msb_range_flags {
 	MSB_RANGE_EVICTING			= 0,
 };
+
+
 
 #define bio_first_sector(bio) ((bio_end_sector(bio) - bio_sectors(bio)))
 

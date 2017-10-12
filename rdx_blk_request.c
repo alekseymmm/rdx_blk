@@ -16,26 +16,64 @@ void __req_put(struct rdx_request *req)
 {
 	pr_debug("Before dec_and_test for req=%p req->ref->cnt=%d\n", req, atomic_read(&req->ref_cnt));
 
-	if (atomic_dec_and_test(&req->ref_cnt)) {
-		struct bio *usr_bio = req->usr_bio;
+	switch(req->type){
+	case RDX_REQ_RW:
+		if (atomic_dec_and_test(&req->ref_cnt)) {
+			struct bio *usr_bio = req->usr_bio;
 
-		trace_block_bio_complete(bdev_get_queue(usr_bio->bi_bdev), usr_bio, req->err);
+			trace_block_bio_complete(bdev_get_queue(usr_bio->bi_bdev), usr_bio, req->err);
 
-		usr_bio->bi_end_io = req->__usr_bio_end_io;
-		usr_bio->bi_private = req->usr_bio_private;
-		usr_bio->bi_error = req->err;
+			usr_bio->bi_end_io = req->__usr_bio_end_io;
+			usr_bio->bi_private = req->usr_bio_private;
+			usr_bio->bi_error = req->err;
 
-		pr_debug("For req=%p restore usr_bio=%p parameters and end it\n", req, usr_bio);
+			pr_debug("For req=%p restore usr_bio=%p parameters and end it\n", req, usr_bio);
 
-		if(req->range != NULL){
-			//release range if it were intersections
-			atomic_dec(&req->range->ref_cnt);
-			pr_debug("request %p ended for range=%p ref_cnt=%d\n",
-					req, req->range, atomic_read(&req->range->ref_cnt));
+			if(req->range != NULL){
+				//release range if it were intersections
+				atomic_dec(&req->range->ref_cnt);
+				pr_debug("request %p ended for range=%p ref_cnt=%d\n",
+						req, req->range, atomic_read(&req->range->ref_cnt));
+			}
+			bio_endio(usr_bio);
+			kmem_cache_free(rdx_request_cachep, req);
 		}
-		bio_endio(usr_bio);
-		kmem_cache_free(rdx_request_cachep, req);
+		break;
+	case RDX_REQ_EVICT_R:
+		if (atomic_dec_and_test(&req->ref_cnt)) {
+			struct bio *usr_bio = req->usr_bio;
+
+			trace_block_bio_complete(bdev_get_queue(usr_bio->bi_bdev), usr_bio, req->err);
+
+			pr_debug("req=%p bio=%p finished. bi_iter: bi_sector=%lu, bi_size=%d, bi_idx=%d, bi_bvec_done=%d\n",
+					req, usr_bio, usr_bio->bi_iter.bi_sector, usr_bio->bi_iter.bi_size,
+					usr_bio->bi_iter.bi_idx, usr_bio->bi_iter.bi_bvec_done);
+
+			usr_bio->bi_end_io = req->__usr_bio_end_io;
+			usr_bio->bi_private = req->usr_bio_private;
+			usr_bio->bi_error = req->err;
+
+			pr_debug("For req=%p restore usr_bio=%p parameters and end it\n", req, usr_bio);
+
+//			if(req->range != NULL){
+//				//release range if it were intersections
+//				atomic_dec(&req->range->ref_cnt);
+//				pr_debug("request %p ended for range=%p ref_cnt=%d\n",
+//						req, req->range, atomic_read(&req->range->ref_cnt));
+//			}
+			bio_endio(usr_bio);
+			if(req->buf){
+				kfree(req->buf);
+			}
+			kmem_cache_free(rdx_request_cachep, req);
+		}
+		break;
+	case RDX_REQ_EVICT_W:
+		break;
 	}
+
+
+
 }
 
 static void __end_transfer(struct bio *bio)
@@ -101,7 +139,7 @@ blk_qc_t rdx_blk_make_request(struct request_queue *q, struct bio *bio){
 }
 
 
-struct rdx_request *__create_req(struct bio *bio, struct rdx_blk *dev){
+struct rdx_request *__create_req(struct bio *bio, struct rdx_blk *dev, enum rdx_req_type type){
 	struct rdx_request *req;
 
 	req = kmem_cache_zalloc(rdx_request_cachep, GFP_ATOMIC);
@@ -115,11 +153,14 @@ struct rdx_request *__create_req(struct bio *bio, struct rdx_blk *dev){
 	req->sectors = bio_sectors(bio);
 	req->dev = dev;
 	req->rw = bio_data_dir(bio);
+	req->type = type;
+	req->buf = NULL;
 
 	//save info about initial bio
 	req->usr_bio = bio;
 	req->usr_bio_private = bio->bi_private;
 	req->__usr_bio_end_io = bio->bi_end_io;
+
 
 	bio->bi_private = req;
 	bio->bi_end_io = __end_transfer;

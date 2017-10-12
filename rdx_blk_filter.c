@@ -89,13 +89,13 @@ int filter_write_req(struct msb_data *data, struct rdx_request *req){
 
 	start_lba_main = get_start_lba(req->first_sector, data);
 	range = msb_hashtable_get_range(data->ht, start_lba_main);
+
 	if(range == NULL){
 		//didn't find it
 		pr_debug("There is no range for req=%p bio=%p, first_sector=%lu, start_lba_main=%llu\n",
 				req, req->usr_bio, req->first_sector, start_lba_main);
-		pr_debug("for req=%p usr_bio = %p\n", req, req->usr_bio);
+
 		range = msb_range_create(data, start_lba_main);
-		pr_debug("for req=%p usr_bio = %p\n", req, req->usr_bio);
 		if(!range){ //failed to create range
 			pr_debug("Failed to create range, not redirecting req=%p\n", req);
 			res = -ENOMEM;
@@ -171,7 +171,6 @@ int msb_write_filter(struct msb_data *data, struct bio *bio)
     		split = bio;
     	}
 
-    	pr_debug("before __create_req split = %p\n", split);
     	req = __create_req(split, data->dev);
 		if(req == NULL){
 			pr_debug("cannot allocate req for bio=%p\n", split);
@@ -279,7 +278,7 @@ int msb_read_filter(struct msb_data *data, struct bio *bio)
 		} else{
 			split = bio;
 		}
-    	pr_debug("before __create_req split = %p\n", split);
+
 		req = __create_req(split, data->dev);
 
 		if(req == NULL){
@@ -288,7 +287,7 @@ int msb_read_filter(struct msb_data *data, struct bio *bio)
 			res = -ENOMEM;
 			break;
 		}
-		printk("for bio=%p created req=%p first_sect=%lu, sectors=%lu\n",
+		pr_debug("for bio=%p created req=%p first_sect=%lu, sectors=%lu\n",
 						split, req, req->first_sector, req->sectors);
 		res = filter_read_req(data, req);
 		if(!res){

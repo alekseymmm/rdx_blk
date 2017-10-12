@@ -93,12 +93,12 @@ struct msb_range *msb_range_create(struct msb_data *data, uint64_t start_lba_mai
 				pr_debug("kmem cache range allocation failed!\n");
 				return NULL;
 			}
-//			range->bitmap = kzalloc(BITS_TO_LONGS(data->range_bitmap_size) * sizeof(unsigned long), GFP_ATOMIC);
-//			if(!range->bitmap){
-//				pr_debug("Cannot allocate bitmap for range=%p for start_lba_main=%llu\n", range, start_lba_main);
-//				kmem_cache_free(range_cachep, range);
-//				return NULL;
-//			}
+			range->bitmap = kzalloc(BITS_TO_LONGS(data->range_bitmap_size) * sizeof(unsigned long), GFP_ATOMIC);
+			if(!range->bitmap){
+				pr_debug("Cannot allocate bitmap for range=%p for start_lba_main=%llu\n", range, start_lba_main);
+				kmem_cache_free(range_cachep, range);
+				return NULL;
+			}
 			range->data = data;
 			range->start_lba_main = start_lba_main;
 			range->start_lba_aux = res;
@@ -257,7 +257,7 @@ int msb_intersect_range(struct msb_data *data, struct msb_range *range, struct r
 		first_bit = find_next_bit(range->bitmap, msb_bitmap_size, bio_first_sect_bit);
 		next_zero_bit = find_next_zero_bit(range->bitmap, msb_bitmap_size, first_bit);
 
-		if(next_zero_bit != data->range_size_sectors){
+		if(next_zero_bit != data->range_bitmap_size){
 			next_zero_bit--; //if we  are still not in the end of the mask
 		}
 
@@ -272,7 +272,7 @@ int msb_intersect_range(struct msb_data *data, struct msb_range *range, struct r
 			//this means that the last subcommand in the list is not intersected with any bits in range
 			//hence it is command to main and could be cached (TODO: consider read caching for bio)
 			usr_bio->bi_bdev = data->dev->main_bdev;
-			pr_debug("First found set bit =%d  > scmd->end bit=%d, no more intersection.\n",
+			pr_debug("First found set bit =%d  > bio_end_sect_bit=%d, no more intersection.\n",
 					first_bit, bio_end_sect_bit);
 //			if((atomic_read(&data->num_caching_cmd) < MSB_MAX_CACHING_CMD) && read_caching_enabled){
 //				__mark_scmd_for_caching(scmd, range);
@@ -342,12 +342,10 @@ int msb_intersect_range(struct msb_data *data, struct msb_range *range, struct r
 					split->bi_iter.bi_sector = range->start_lba_aux + offset;
 
 					bio_chain(split, usr_bio);
-					pr_debug("split_bio(%p), bdev=%s, first_sector=%lu, size=%d\n",
-							split, split->bi_bdev->bd_disk->disk_name, bio_first_sector(split), bio_sectors(split));
+					pr_debug("To range %p add new split bio %p, bdev=%s, first_sector=%lu, size=%d\n",
+							range, split, split->bi_bdev->bd_disk->disk_name, bio_first_sector(split), bio_sectors(split));
 					submit_bio(split);
 				}
-
-				pr_debug("Add new split bio =%p to aux_vol for range=%p and increase ref_cnt\n", split, range);
 //				new_scmd->priv = &range->scpriv; //
 //				atomic_inc(&range->ref_cnt);
 //			    pr_debug("For range=%p ref_cnt =%d\n",

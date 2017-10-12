@@ -90,10 +90,15 @@ struct msb_range *msb_range_create(struct msb_data *data, uint64_t start_lba_mai
 			range = kmem_cache_zalloc(range_cachep, GFP_ATOMIC);
 
 			if(!range){
-				pr_debug("kmem cache range allcoation failed!\n");
+				pr_debug("kmem cache range allocation failed!\n");
 				return NULL;
 			}
-			range->bitmap = kzalloc(BITS_TO_LONGS(data->range_bitmap_size) * sizeof(unsigned long), GFP_ATOMIC);
+//			range->bitmap = kzalloc(BITS_TO_LONGS(data->range_bitmap_size) * sizeof(unsigned long), GFP_ATOMIC);
+//			if(!range->bitmap){
+//				pr_debug("Cannot allocate bitmap for range=%p for start_lba_main=%llu\n", range, start_lba_main);
+//				kmem_cache_free(range_cachep, range);
+//				return NULL;
+//			}
 			range->data = data;
 			range->start_lba_main = start_lba_main;
 			range->start_lba_aux = res;

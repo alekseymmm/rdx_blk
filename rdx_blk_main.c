@@ -215,15 +215,17 @@ static int __init rdx_blk_init(void)
     if (!rdx_request_cachep) {
         pr_debug( "Could not allocate rdx_request_cachep!\n" ) ;
         ret = -ENOMEM;
+        goto out;
     }
 
-    range_cachep = kmem_cache_create("range_cachep", sizeof(struct rdx_request),
+    range_cachep = kmem_cache_create("range_cachep", sizeof(struct msb_range),
     		0, 0,  NULL);
 
     if (!range_cachep) {
         pr_debug( "Could not allocate range_cachep!\n" ) ;
         kmem_cache_destroy(rdx_request_cachep);
         ret = -ENOMEM;
+        goto out;
     }
 
 	rdx_major = register_blkdev(0, RDX_BLKDEV_NAME);
@@ -231,6 +233,7 @@ static int __init rdx_blk_init(void)
 		return rdx_major;
 	}
 
+out:
 	return ret;
 }
 

@@ -93,16 +93,16 @@ int filter_write_req(struct msb_data *data, struct rdx_request *req){
 		//didn't find it
 		pr_debug("There is no range for req=%p bio=%p, first_sector=%lu, start_lba_main=%llu\n",
 				req, req->usr_bio, req->first_sector, start_lba_main);
-
+		pr_debug("for req=%p usr_bio = %p\n", req, req->usr_bio);
 		range = msb_range_create(data, start_lba_main);
-
+		pr_debug("for req=%p usr_bio = %p\n", req, req->usr_bio);
 		if(!range){ //failed to create range
 			pr_debug("Failed to create range, not redirecting req=%p\n", req);
 			res = -ENOMEM;
 			return res;
 		}
 
-		req->range = range;
+		pr_debug("for req=%p usr_bio = %p\n", req, req->usr_bio);
 		//redirect bio according to range mapping
 		res = __redirect_req(req, range, data);
 
@@ -171,6 +171,7 @@ int msb_write_filter(struct msb_data *data, struct bio *bio)
     		split = bio;
     	}
 
+    	pr_debug("before __create_req split = %p\n", split);
     	req = __create_req(split, data->dev);
 		if(req == NULL){
 			pr_debug("cannot allocate req for bio=%p\n", split);
@@ -178,11 +179,13 @@ int msb_write_filter(struct msb_data *data, struct bio *bio)
 			res = -ENOMEM;
 			break;
 		}
+
 		pr_debug("for bio=%p created req=%p first_sect=%lu, sectors=%lu\n",
 						split, req, req->first_sector, req->sectors);
 		res = filter_write_req(data, req);
-		if(!res){
-			//?
+		if(res == -ENOMEM){
+			bio->bi_bdev = data->dev->main_bdev;
+			submit_bio(bio);
 		}
     }while(split != bio);
 
@@ -235,7 +238,7 @@ int filter_read_req(struct msb_data *data, struct rdx_request *req){
  */
 int msb_read_filter(struct msb_data *data, struct bio *bio)
 {
-   int res = 0;
+	int res = 0;
 	struct msb_hashtable *ht;
 	uint64_t first_sector, sectors;
 	uint64_t offset;	/*offset in current range*/
@@ -276,7 +279,7 @@ int msb_read_filter(struct msb_data *data, struct bio *bio)
 		} else{
 			split = bio;
 		}
-
+    	pr_debug("before __create_req split = %p\n", split);
 		req = __create_req(split, data->dev);
 
 		if(req == NULL){
@@ -286,7 +289,7 @@ int msb_read_filter(struct msb_data *data, struct bio *bio)
 			break;
 		}
 		printk("for bio=%p created req=%p first_sect=%lu, sectors=%lu\n",
-						bio, req, req->first_sector, req->sectors);
+						split, req, req->first_sector, req->sectors);
 		res = filter_read_req(data, req);
 		if(!res){
 			//?

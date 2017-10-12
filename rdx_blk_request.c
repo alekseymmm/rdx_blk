@@ -54,14 +54,15 @@ void __req_put(struct rdx_request *req)
 
 			usr_bio->bi_bdev = req->dev->main_bdev;
 			usr_bio->bi_iter.bi_sector = 8;
-			usr_bio->bi_iter.bi_size = req->sectors;
+			usr_bio->bi_iter.bi_size = req->sectors << 9;
 			usr_bio->bi_iter.bi_idx = 0;
+			usr_bio->bi_iter.bi_bvec_done = 0;
 			usr_bio->bi_opf = REQ_OP_WRITE;
 
 			req->type = RDX_REQ_EVICT_W;
 
 			atomic_set(&req->ref_cnt, 1);
-
+			pr_debug("bio=%p, bio->remaining=%d bio->bi_cnt=%d\n", usr_bio, atomic_read(&usr_bio->__bi_remaining), atomic_read(&usr_bio->__bi_cnt));
 			submit_bio(usr_bio);
 		}
 
@@ -88,6 +89,7 @@ void __req_put(struct rdx_request *req)
 //				pr_debug("request %p ended for range=%p ref_cnt=%d\n",
 //						req, req->range, atomic_read(&req->range->ref_cnt));
 //			}
+			pr_debug("bio=%p, bio->remaining=%d bio->bi_cnt=%d\n",usr_bio,  atomic_read(&usr_bio->__bi_remaining), atomic_read(&usr_bio->__bi_cnt));
 			bio_put(usr_bio);
 			if(req->buf){
 				kfree(req->buf);

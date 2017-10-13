@@ -92,6 +92,7 @@ void __req_put(struct rdx_request *req)
 			pr_debug("bio=%p, bio->remaining=%d bio->bi_cnt=%d\n",usr_bio,  atomic_read(&usr_bio->__bi_remaining), atomic_read(&usr_bio->__bi_cnt));
 			bio_put(usr_bio);
 			if(req->buf){
+				pr_debug("free req=%p buf=%p\n", req, req->buf);
 				kfree(req->buf);
 			}
 			kmem_cache_free(rdx_request_cachep, req);

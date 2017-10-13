@@ -16,12 +16,15 @@
 #include <linux/blkdev.h>
 #include <linux/init.h>
 #include <linux/slab.h>
+#include <linux/timer.h>
 
 #include <linux/list.h>
 #include <linux/rbtree.h>
 #include <linux/bitmap.h>
 #include <linux/types.h>
 
+#define KERNEL_SECT_SIZE_SHIFT 9
+#define KERNEL_SECT_SIZE (1 << KERNEL_SECT_SIZE_SHIFT)
 #define RDX_BLK_MIN_POOL_PAGES 128
 #define MSB_DEFAULT_RANGE_SIZE_SECTORS (20 * 1024 * 2)
 #define MSB_DEFAULT_MAX_NUM_EVICT_CMD (8)
@@ -70,6 +73,7 @@ struct rdx_blk {
 	sector_t 				sectors;
 	struct bio_set 			*split_bioset;
 	struct msb_data 		*data;
+	struct timer_list		*evict_timer;
 };
 
 struct msb_data {

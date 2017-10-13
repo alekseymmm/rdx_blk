@@ -27,7 +27,7 @@ struct rdx_blk *rdx_blk = NULL;
 
 struct kmem_cache *rdx_request_cachep = NULL;
 struct kmem_cache *range_cachep = NULL;
-struct workqueue_struct *msb_wq = NULL;
+struct workqueue_struct *rdx_blk_evict_wq = NULL;
 
 static char *main_bdev_path = "/dev/md/storage_14";
 module_param(main_bdev_path, charp, 0000);
@@ -196,6 +196,7 @@ static int rdx_blk_create_dev(void)
 	add_disk(gd);
 	pr_debug("Disk %s added on node %d, rdx_blk=%p\n", gd->disk_name, home_node, rdx_blk);
 
+	init_timer(&rdx_blk->evict_timer);
 	return 0;
 
 out:
@@ -210,13 +211,21 @@ static int __init rdx_blk_init(void)
 	printk("Main storage path: %s, buffer path: %s\n", main_bdev_path, aux_bdev_path);
 	mutex_init(&lock);
 
+	rdx_blk_evict_wq = alloc_workqueue("RDX_BLK_EVICT_WQ", WQ_MEM_RECLAIM | WQ_HIGHPRI |
+                              WQ_UNBOUND, num_online_cpus());
+    if(!rdx_blk_evict_wq){
+    	pr_debug("Cold not create the rdx_blk_evict_workqueue!\n");
+    	ret = -ENOMEM;
+    	goto out;
+    }
+
     rdx_request_cachep = kmem_cache_create("rdx_request_cachep", sizeof(struct rdx_request),
     		0, 0,  NULL);
 
     if (!rdx_request_cachep) {
         pr_debug( "Could not allocate rdx_request_cachep!\n" ) ;
         ret = -ENOMEM;
-        goto out;
+        goto out_evict_wq;
     }
 
     range_cachep = kmem_cache_create("range_cachep", sizeof(struct msb_range),
@@ -224,16 +233,25 @@ static int __init rdx_blk_init(void)
 
     if (!range_cachep) {
         pr_debug( "Could not allocate range_cachep!\n" ) ;
-        kmem_cache_destroy(rdx_request_cachep);
         ret = -ENOMEM;
-        goto out;
+        goto out_request;
     }
 
 	rdx_major = register_blkdev(0, RDX_BLKDEV_NAME);
 	if(rdx_major < 0){
-		return rdx_major;
+		pr_debug("Cannot register blkdev\n");
+		ret = -EINVAL;
+		goto out_range;
 	}
 
+	return 0;
+
+out_range:
+	kmem_cache_destroy(range_cachep);
+out_request:
+	kmem_cache_destroy(rdx_request_cachep);
+out_evict_wq:
+	destroy_workqueue(msb_wq);
 out:
 	return ret;
 }
@@ -244,7 +262,13 @@ static void __exit rdx_blk_exit(void)
 	if (rdx_blk != NULL){
 		rdx_destroy_dev();
 	}
+	if(rdx_blk->evict_timer){
+		del_timer(&rdx_blk->evict_timer);
+	}
 
+	if(rdx_blk_evict_wq){
+		destroy_workqueue(msb_wq);
+	}
     if (rdx_request_cachep){
         kmem_cache_destroy(rdx_request_cachep);
     }

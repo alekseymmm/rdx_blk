@@ -39,7 +39,7 @@ extern struct msb_data *rdx_msb_data;
 extern struct kmem_cache *range_cachep;
 
 /** MSB workqueue */
-extern struct workqueue_struct *msb_wq;
+extern struct workqueue_struct *rdx_blk_evict_wq;
 
 extern bool  read_caching_enabled;
 
@@ -73,7 +73,7 @@ struct rdx_blk {
 	sector_t 				sectors;
 	struct bio_set 			*split_bioset;
 	struct msb_data 		*data;
-	struct timer_list		*evict_timer;
+	struct timer_list		evict_timer;
 };
 
 struct msb_data {

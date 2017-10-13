@@ -196,7 +196,7 @@ static int rdx_blk_create_dev(void)
 	add_disk(gd);
 	pr_debug("Disk %s added on node %d, rdx_blk=%p\n", gd->disk_name, home_node, rdx_blk);
 
-	init_timer(&rdx_blk->evict_timer);
+	setup_timer(&rdx_blk->evict_timer, __evict_timer_handler, 0);
 	return 0;
 
 out:
@@ -251,7 +251,7 @@ out_range:
 out_request:
 	kmem_cache_destroy(rdx_request_cachep);
 out_evict_wq:
-	destroy_workqueue(msb_wq);
+	destroy_workqueue(rdx_blk_evict_wq);
 out:
 	return ret;
 }
@@ -259,15 +259,14 @@ out:
 
 static void __exit rdx_blk_exit(void)
 {
+	stop_evict_service(rdx_blk);
+
 	if (rdx_blk != NULL){
 		rdx_destroy_dev();
 	}
-	if(rdx_blk->evict_timer){
-		del_timer(&rdx_blk->evict_timer);
-	}
 
 	if(rdx_blk_evict_wq){
-		destroy_workqueue(msb_wq);
+		destroy_workqueue(rdx_blk_evict_wq);
 	}
     if (rdx_request_cachep){
         kmem_cache_destroy(rdx_request_cachep);
@@ -304,7 +303,13 @@ int __set_cur_cmd(const char *str, struct kernel_param *kp){
 	}
 	if(!strcmp(str, "test\n")){
 		if(rdx_blk){
-			generate_bio_test(rdx_blk);
+//			generate_bio_test(rdx_blk);
+		}
+	}
+
+	if(!strcmp(str, "evict_start\n")){
+		if(rdx_blk){
+			start_evict_service(rdx_blk);
 		}
 	}
 	return 0;

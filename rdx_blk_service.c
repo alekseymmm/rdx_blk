@@ -193,14 +193,56 @@ void evict_to_main(struct msb_data* data){
 	return;
 }
 
-static void __evict_timer_handler(unsigned long data_ptr)
+static void __start_evict(struct work_struct *ws){
+	struct msb_data *data = container_of(ws, struct msb_data, work);
+
+	pr_debug("Start data eviction\n");
+	clear_bit(MSB_CANCEL_EVICTION, &data->flags);
+	set_bit(MSB_EVICTION_IN_PROGRESS, &data->flags);
+	evict_to_main(data);
+	clear_bit(MSB_EVICTION_IN_PROGRESS, &data->flags);
+	pr_debug("Finish data eviction. Next will start soon\n");
+
+	wake_up_interruptible(&data->wq_evict_cmd);
+
+	if(!test_bit(MSB_CANCEL_EVICTION, &data->flags)){
+		mod_timer(&data->dev->evict_timer, jiffies + msecs_to_jiffies(3 * 1000));
+	}
+}
+
+void start_evict_service(struct rdx_blk *dev)
+{
+    mod_timer(&dev->evict_timer, jiffies + msecs_to_jiffies(1000));
+    pr_debug("Eviction service started\n");
+}
+
+int stop_evict_service(struct rdx_blk *dev)
+{
+    struct msb_data *data = dev->data;
+
+    del_timer_sync(&dev->evict_timer);
+
+    set_bit(MSB_CANCEL_EVICTION, &data->flags);
+
+    pr_debug("Eviction in progress = %d\n", test_bit(MSB_EVICTION_IN_PROGRESS, &data->flags));
+    pr_debug("Service going to sleep until all eviction commands done \n");
+    wait_event_interruptible(data->wq_evict_cmd,
+    		(test_bit(MSB_EVICTION_IN_PROGRESS, &data->flags) == 0) && (atomic_read(&data->num_evict_cmd) == 0));
+    pr_debug("Service awoke after achieving number of evict cmd == 0 and eviction stopped\n");
+
+    pr_debug("Eviction stopped.\n");
+    return 0;
+}
+
+
+void __evict_timer_handler(unsigned long data_ptr)
 {
     struct msb_data *data = (struct msb_data *)data_ptr;
 
     pr_debug("MSB timer handler called\n");
 
     INIT_WORK(&data->work, __start_evict);
-    queue_work(msb_wq, &data->work);
+    queue_work(rdx_blk_evict_wq, &data->work);
 
 //    mod_timer(&vs->timer, jiffies + msecs_to_jiffies(atomic_read(&vs->delay)));
 }

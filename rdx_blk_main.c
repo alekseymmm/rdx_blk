@@ -95,12 +95,12 @@ static void rdx_destroy_dev(void)
 		pr_debug("For dev %s queue cleaned\n", RDX_BLKDEV_NAME);
 	}
 
-	if(rdx_blk->main_bdev){
+	if(!IS_ERR(rdx_blk->main_bdev)){
 		blkdev_put(rdx_blk->main_bdev, FMODE_READ | FMODE_WRITE);
 		pr_debug("For dev %s put main_bdev\n", RDX_BLKDEV_NAME);
 	}
 
-	if(rdx_blk->aux_bdev){
+	if(IS_ERR(rdx_blk->aux_bdev)){
 		blkdev_put(rdx_blk->aux_bdev, FMODE_READ | FMODE_WRITE);
 		pr_debug("For dev %s put aux_bdev\n", RDX_BLKDEV_NAME);
 	}
@@ -196,7 +196,7 @@ static int rdx_blk_create_dev(void)
 	add_disk(gd);
 	pr_debug("Disk %s added on node %d, rdx_blk=%p\n", gd->disk_name, home_node, rdx_blk);
 
-	setup_timer(&rdx_blk->evict_timer, __evict_timer_handler, 0);
+	setup_timer(&rdx_blk->evict_timer, __evict_timer_handler, (unsigned long)rdx_blk->data);
 	return 0;
 
 out:
@@ -307,9 +307,17 @@ int __set_cur_cmd(const char *str, struct kernel_param *kp){
 		}
 	}
 
-	if(!strcmp(str, "evict_start\n")){
+	if(!strcmp(str, "start_evict\n")){
 		if(rdx_blk){
 			start_evict_service(rdx_blk);
+			return 0;
+		}
+	}
+
+	if(!strcmp(str, "stop_evict\n")){
+		if(rdx_blk){
+			stop_evict_service(rdx_blk);
+			return 0;
 		}
 	}
 	return 0;

@@ -94,8 +94,8 @@ uint64_t evict_range(struct msb_data *data, struct msb_range *range, uint64_t la
 		first_sector = bit2lba(range, first_bit);
 		sectors = bit2lba(range, next_zero_bit) - first_sector;
 
-		if(sectors > BIO_MAX_PAGES * PAGE_SIZE){
-			sectors = BIO_MAX_PAGES * PAGE_SIZE;
+		if(sectors > BIO_MAX_PAGES * PAGE_SIZE / KERNEL_SECT_SIZE){
+			sectors = BIO_MAX_PAGES * PAGE_SIZE / KERNEL_SECT_SIZE;
 		}
 
 		pr_debug("Generate evict bio first_sect=%llu, len=%d\n", first_sector, sectors);

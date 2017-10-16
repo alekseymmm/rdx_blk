@@ -145,38 +145,6 @@ static void __end_transfer(struct bio *bio)
 	__req_put(req);
 }
 
-
-//static void __start_transfer(struct rdx_request *req)
-//{
-//	struct bio *bio = req->usr_bio;
-//	struct bio *split;
-//
-//	if(bio_sectors(bio) > 8){
-//		split = bio_split(bio, 8, GFP_NOIO, rdx_blk->split_bioset);
-//		if(!split){
-//			pr_debug("Cannot split\n");
-//			req->err = -ENOMEM;
-//			__req_put(req);
-//		}
-//		else{
-//			bio_chain(split, bio);
-//			split->bi_bdev = rdx_blk->aux_bdev;
-//
-//			pr_debug("split_bio(%p), bdev=%s, first_sector=%lu, size=%d\n",
-//					split, split->bi_bdev->bd_disk->disk_name, bio_first_sector(split), bio_sectors(split));
-//			submit_bio(split);
-//		}
-//	}
-//
-//	bio->bi_bdev = rdx_blk->main_bdev;
-//	bio->bi_private = req;
-//	bio->bi_end_io = __end_transfer;
-//
-//	pr_debug("bio(%p), bdev=%s, first_sector=%lu, size=%d\n",
-//			bio, bio->bi_bdev->bd_disk->disk_name, bio_first_sector(bio), bio_sectors(bio));
-//	submit_bio(bio);
-//}
-
 // request covers bio to only one range
 blk_qc_t rdx_blk_make_request(struct request_queue *q, struct bio *bio){
 	struct rdx_blk *dev = q->queuedata;
@@ -188,9 +156,9 @@ blk_qc_t rdx_blk_make_request(struct request_queue *q, struct bio *bio){
 	}
 
 	if(bio_data_dir(bio) == WRITE){
-		msb_write_filter(dev->data, bio);
+		msb_write_filter(dev->data, bio, false);
 	} else { // READ
-		msb_read_filter(dev->data, bio);
+		msb_read_filter(dev->data, bio, false);
 	}
 
 	return BLK_QC_T_NONE;

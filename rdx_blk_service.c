@@ -243,7 +243,7 @@ void __evict_timer_handler(unsigned long data_ptr)
     pr_debug("MSB timer handler called\n");
 
     INIT_WORK(&data->work, __start_evict);
-    queue_work(rdx_blk_evict_wq, &data->work);
+    queue_work(rdx_blk_wq, &data->work);
 
 //    mod_timer(&vs->timer, jiffies + msecs_to_jiffies(atomic_read(&vs->delay)));
 }

@@ -8,8 +8,8 @@
 #ifndef RDX_BLK_FILTER_H_
 #define RDX_BLK_FILTER_H_
 
-int msb_write_filter(struct msb_data *data, struct bio *bio);
+int msb_write_filter(struct msb_data *data, struct bio *bio, bool bio_with_req);
 
-int msb_read_filter(struct msb_data *data, struct bio *bio);
+int msb_read_filter(struct msb_data *data, struct bio *bio, bool bio_with_req);
 
 #endif /* RDX_BLK_FILTER_H_ */

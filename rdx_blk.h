@@ -39,7 +39,7 @@ extern struct msb_data *rdx_msb_data;
 extern struct kmem_cache *range_cachep;
 
 /** MSB workqueue */
-extern struct workqueue_struct *rdx_blk_evict_wq;
+extern struct workqueue_struct *rdx_blk_wq;
 
 extern bool  read_caching_enabled;
 
@@ -62,6 +62,7 @@ struct rdx_request{
 	struct msb_range	*range;
 	enum rdx_req_type 	type;
 	char  				*buf;
+	struct list_head	list;
 };
 
 struct rdx_blk {
@@ -74,6 +75,11 @@ struct rdx_blk {
 	struct bio_set 			*split_bioset;
 	struct msb_data 		*data;
 	struct timer_list		evict_timer;
+
+	struct list_head		req_list;
+	struct work_struct		penging_req_work;
+	atomic_t 				processing_pending_req;
+	spinlock_t				req_list_lock;
 };
 
 struct msb_data {

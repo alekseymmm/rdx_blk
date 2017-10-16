@@ -27,7 +27,7 @@ struct rdx_blk *rdx_blk = NULL;
 
 struct kmem_cache *rdx_request_cachep = NULL;
 struct kmem_cache *range_cachep = NULL;
-struct workqueue_struct *rdx_blk_evict_wq = NULL;
+struct workqueue_struct *rdx_blk_wq = NULL;
 
 static char *main_bdev_path = "/dev/md/storage_14";
 module_param(main_bdev_path, charp, 0000);
@@ -197,6 +197,9 @@ static int rdx_blk_create_dev(void)
 	pr_debug("Disk %s added on node %d, rdx_blk=%p\n", gd->disk_name, home_node, rdx_blk);
 
 	setup_timer(&rdx_blk->evict_timer, __evict_timer_handler, (unsigned long)rdx_blk->data);
+	atomic_set(&rdx_blk->processing_pending_req, 0);
+	spin_lock_init(&rdx_blk->req_list_lock);
+
 	return 0;
 
 out:
@@ -211,9 +214,9 @@ static int __init rdx_blk_init(void)
 	printk("Main storage path: %s, buffer path: %s\n", main_bdev_path, aux_bdev_path);
 	mutex_init(&lock);
 
-	rdx_blk_evict_wq = alloc_workqueue("RDX_BLK_EVICT_WQ", WQ_MEM_RECLAIM | WQ_HIGHPRI |
+	rdx_blk_wq = alloc_workqueue("RDX_BLK_EVICT_WQ", WQ_MEM_RECLAIM | WQ_HIGHPRI |
                               WQ_UNBOUND, num_online_cpus());
-    if(!rdx_blk_evict_wq){
+    if(!rdx_blk_wq){
     	pr_debug("Cold not create the rdx_blk_evict_workqueue!\n");
     	ret = -ENOMEM;
     	goto out;
@@ -251,7 +254,7 @@ out_range:
 out_request:
 	kmem_cache_destroy(rdx_request_cachep);
 out_evict_wq:
-	destroy_workqueue(rdx_blk_evict_wq);
+	destroy_workqueue(rdx_blk_wq);
 out:
 	return ret;
 }
@@ -265,8 +268,8 @@ static void __exit rdx_blk_exit(void)
 		rdx_destroy_dev();
 	}
 
-	if(rdx_blk_evict_wq){
-		destroy_workqueue(rdx_blk_evict_wq);
+	if(rdx_blk_wq){
+		destroy_workqueue(rdx_blk_wq);
 	}
     if (rdx_request_cachep){
         kmem_cache_destroy(rdx_request_cachep);

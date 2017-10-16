@@ -18,11 +18,39 @@
 #include <linux/bitmap.h>
 #include <linux/rwlock.h>
 #include <linux/bio.h>
+#include <linux/list.h>
 
 #include "rdx_blk.h"
 #include "rdx_blk_hashtable.h"
 #include "rdx_blk_range.h"
 #include "rdx_blk_request.h"
+#include "rdx_blk_filter.h"
+
+void process_pending_req(struct work_struct *ws){
+	struct rdx_blk* dev = container_of(ws, struct rdx_blk, penging_req_work);
+	struct list_head submit_list;
+	struct rdx_request *req, *req_next;
+
+	spin_lock_bh(&rdx_blk->req_list_lock);
+		list_for_each_entry_safe(req, req_next, &rdx_blk->req_list, list){
+			list_del(&req->list);
+			pr_debug("Remove from pending list req=%p dev=%s first_sect=%lu, sectors=%lu\n",
+					req, req->dev->gd->disk_name, req->first_sector, req->sectors);
+			list_add_tail(&req->list, &submit_list);
+			pr_debug("Add to submit list req=%p dev=%s first_sect=%lu, sectors=%lu\n",
+					req, req->dev->gd->disk_name, req->first_sector, req->sectors);
+		}
+		atomic_set(&rdx_blk->processing_pending_req, 0);
+	spin_unlock_bh(&rdx_blk->req_list_lock);
+
+	list_for_each_entry_safe(req, req_next, &submit_list, list){
+		if(bio_data_dir(req->usr_bio) == WRITE){
+			msb_write_filter(dev->data, req->usr_bio, true);
+		} else { // READ
+			msb_read_filter(dev->data, req->usr_bio, true);
+		}
+	}
+}
 
 //return 0 for successful redirection and -EBUSY if range is migrating
 int __redirect_req(struct rdx_request *req, struct msb_range *range, struct msb_data *data){
@@ -128,7 +156,7 @@ int filter_write_req(struct msb_data *data, struct rdx_request *req){
  * @param cmd - the RVM command.
  * @return 0 for success, or error code.
  */
-int msb_write_filter(struct msb_data *data, struct bio *bio)
+int msb_write_filter(struct msb_data *data, struct bio *bio, bool bio_with_req)
 {
     int res = 0;
     struct msb_hashtable *ht;
@@ -138,7 +166,7 @@ int msb_write_filter(struct msb_data *data, struct bio *bio)
     struct bio *split;
     uint64_t msb_range_size_sectors = data->range_size_sectors;
 
-    struct rdx_request *req;
+    struct rdx_request *req = NULL;
 
     //check whether data is being deleted
 //    if (test_bit(MSB_FLAG_DELETING, &data->flags))
@@ -172,20 +200,37 @@ int msb_write_filter(struct msb_data *data, struct bio *bio)
     		split = bio;
     	}
 
-    	req = __create_req(split, data->dev, RDX_REQ_RW);
-		if(req == NULL){
-			pr_debug("cannot allocate req for bio=%p\n", split);
-			bio_io_error(bio);
-			res = -ENOMEM;
-			break;
-		}
+    	if(!bio_with_req){ //there is no assigned request for this bio
+			req = __create_req(split, data->dev, RDX_REQ_RW);
+			if(req == NULL){
+				pr_debug("cannot allocate req for bio=%p\n", split);
+				bio_io_error(bio);
+				res = -ENOMEM;
+				break;
+			}
+			pr_debug("for bio=%p created req=%p first_sect=%lu, sectors=%lu\n",
+							split, req, req->first_sector, req->sectors);
+    	}
 
-		pr_debug("for bio=%p created req=%p first_sect=%lu, sectors=%lu\n",
-						split, req, req->first_sector, req->sectors);
+
 		res = filter_write_req(data, req);
+
 		if(res == -ENOMEM){
 			bio->bi_bdev = data->dev->main_bdev;
 			submit_bio(bio);
+		}
+		if(res == -EBUSY){ //bio to range that is evicting
+			pr_debug("Returned -EBUSY for bio(%p), bdev=%s, first_sector=%lu, size=%d\n",
+    				split, split->bi_bdev->bd_disk->disk_name, bio_first_sector(split), bio_sectors(split));
+			spin_lock_bh(&rdx_blk->req_list_lock);
+			list_add_tail(&req->list, &rdx_blk->req_list);
+			spin_unlock_bh(&rdx_blk->req_list_lock);
+
+			if(atomic_add_unless(&rdx_blk->processing_pending_req, 1, 1)){
+				pr_debug("Init rdx_blk->pending_req_work and queue it\n");
+				INIT_WORK(&rdx_blk->penging_req_work, process_pending_req);
+				queue_work(rdx_blk_wq, &rdx_blk->penging_req_work);
+			}
 		}
     }while(split != bio);
 
@@ -236,7 +281,7 @@ int filter_read_req(struct msb_data *data, struct rdx_request *req){
  * @param cmd - the RVM command.
  * @return 0 for success, or error code.
  */
-int msb_read_filter(struct msb_data *data, struct bio *bio)
+int msb_read_filter(struct msb_data *data, struct bio *bio, bool bio_with_req)
 {
 	int res = 0;
 	struct msb_hashtable *ht;
@@ -246,7 +291,7 @@ int msb_read_filter(struct msb_data *data, struct bio *bio)
 	struct bio *split;
 	uint64_t msb_range_size_sectors = data->range_size_sectors;
 
-	struct rdx_request *req;
+	struct rdx_request *req = NULL;
 
 	//check whether data is being deleted
 //    if (test_bit(MSB_FLAG_DELETING, &data->flags))
@@ -280,18 +325,31 @@ int msb_read_filter(struct msb_data *data, struct bio *bio)
 			split = bio;
 		}
 
-		req = __create_req(split, data->dev, RDX_REQ_RW);
-		if(req == NULL){
-			pr_debug("cannot allocate req for bio=%p\n", split);
-			bio_io_error(bio);
-			res = -ENOMEM;
-			break;
-		}
-		pr_debug("for bio=%p created req=%p first_sect=%lu, sectors=%lu\n",
-						split, req, req->first_sector, req->sectors);
+    	if(!bio_with_req){ //there is no assigned request for this bio
+			req = __create_req(split, data->dev, RDX_REQ_RW);
+			if(req == NULL){
+				pr_debug("cannot allocate req for bio=%p\n", split);
+				bio_io_error(bio);
+				res = -ENOMEM;
+				break;
+			}
+			pr_debug("for bio=%p created req=%p first_sect=%lu, sectors=%lu\n",
+							split, req, req->first_sector, req->sectors);
+    	}
+
 		res = filter_read_req(data, req);
-		if(!res){
-			//?
+		if(res == -EBUSY){ //bio to range that is evicting
+			pr_debug("Returned -EBUSY for bio(%p), bdev=%s, first_sector=%lu, size=%d\n",
+    				split, split->bi_bdev->bd_disk->disk_name, bio_first_sector(split), bio_sectors(split));
+			spin_lock_bh(&rdx_blk->req_list_lock);
+			list_add_tail(&req->list, &rdx_blk->req_list);
+			spin_unlock_bh(&rdx_blk->req_list_lock);
+
+			if(atomic_add_unless(&rdx_blk->processing_pending_req, 1, 1)){
+				pr_debug("Init rdx_blk->pending_req_work and queue it\n");
+				INIT_WORK(&rdx_blk->penging_req_work, process_pending_req);
+				queue_work(rdx_blk_wq, &rdx_blk->penging_req_work);
+			}
 		}
 	}while(split != bio);
 

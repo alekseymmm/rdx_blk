@@ -80,6 +80,7 @@ void __req_put(struct rdx_request *req)
 		break;
 	case RDX_REQ_EVICT_W:
 		if (atomic_dec_and_test(&req->ref_cnt)) {
+			uint64_t main_first_sector, offset ;
 			struct bio *usr_bio = req->usr_bio;
 
 			//trace_block_bio_complete(bdev_get_queue(usr_bio->bi_bdev), usr_bio, req->err);
@@ -93,8 +94,11 @@ void __req_put(struct rdx_request *req)
 					range, req, req->first_sector, req->sectors);
 			data = range->data;
 			pr_debug("in interrupt %lu, in irq=%lu, in soft_irq=%lu\n", in_interrupt(), in_irq(),in_softirq() );
+
+			offset = req-> first_sector - range->start_lba_aux;
+			main_first_sector = range->start_lba_main + offset;
 			write_lock_bh(&range->lock);
-				msb_clearbits_in_range(range, req->first_sector, req->sectors);
+				msb_clearbits_in_range(range, main_first_sector, req->sectors);
 				bit_pos = find_first_bit(range->bitmap, data->range_bitmap_size);
 				pr_debug("In range=%p position of nonzero bit = %lu \n", range, bit_pos);
 			write_unlock_bh(&range->lock);

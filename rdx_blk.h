@@ -112,8 +112,8 @@ struct msb_range{
 	struct hlist_node	ht_node;
 	struct msb_data 	*data;
 	atomic_t 			ref_cnt;
-	//struct rvm_subcommand_private scpriv;       /**< Subcommand private*/
 };
+
 /**
  * A hashtable bucket.
  * The ranges in the bucket are ordered by the key (LBA on the start_lba_main.)

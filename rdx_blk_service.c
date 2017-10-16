@@ -164,6 +164,7 @@ void evict_to_main(struct msb_data* data){
 
 		//if there are active rw commands to this range then skip it
 		// 0 mens we don't have any active cmd
+
 		if(atomic_dec_and_test(&range->ref_cnt)){
 			pr_debug("Mark range=%p for eviction start_lba_main=%llu, start_lba_aux=%llu \n",
 							range, range->start_lba_main, range->start_lba_aux);

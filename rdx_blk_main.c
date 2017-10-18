@@ -45,7 +45,7 @@ static unsigned long msb_range_size_sectors = 40960;
 module_param(msb_range_size_sectors, ulong, S_IRUGO);
 MODULE_PARM_DESC(msb_range_size_sectors, "Range size in 512b sectors");
 
-static unsigned long max_num_evict_cmd = 8;
+static unsigned long max_num_evict_cmd = 1;
 module_param(max_num_evict_cmd, ulong, S_IRUGO);
 MODULE_PARM_DESC(msb_range_size_sectors, "Maximal number of eviction commands");
 

@@ -35,12 +35,22 @@ void msb_clearbits_in_range(struct msb_range *range, uint64_t lba, uint32_t len)
 int msb_intersect_range(struct msb_data *data, struct msb_range *range, struct rdx_request *req);
 
 //returns lba corresponding to bit in range
-static inline uint64_t bit2lba(struct msb_range *range, int bit_pos){
+static inline uint64_t bit2lba_main(struct msb_range *range, int bit_pos){
 	return range->start_lba_main + bit_pos * MSB_BLOCK_SIZE_SECTORS;
 }
 
-static inline int lba2bit(struct msb_range *range, uint64_t lba){
+//returns lba corresponding to bit in range
+static inline uint64_t bit2lba_aux(struct msb_range *range, int bit_pos){
+	return range->start_lba_aux + bit_pos * MSB_BLOCK_SIZE_SECTORS;
+}
+
+static inline int lba_main2bit(struct msb_range *range, uint64_t lba){
 	uint64_t offset = lba - range->start_lba_main;
+	return offset / MSB_BLOCK_SIZE_SECTORS;
+}
+
+static inline int lba_aux2bit(struct msb_range *range, uint64_t lba){
+	uint64_t offset = lba - range->start_lba_aux;
 	return offset / MSB_BLOCK_SIZE_SECTORS;
 }
 

@@ -28,7 +28,7 @@ int generate_evict_bio(uint64_t first_sect, int sectors, struct rdx_blk *dev, st
 		return -ENOMEM;
 	}
 	bio->bi_iter.bi_sector = first_sect;
-	bio->bi_bdev = dev->main_bdev;
+	bio->bi_bdev = dev->aux_bdev;
 	bio->bi_opf = REQ_OP_READ;
 
 	req = __create_req(bio, dev, RDX_REQ_EVICT_R);
@@ -83,7 +83,7 @@ uint64_t evict_range(struct msb_data *data, struct msb_range *range, uint64_t la
 	pr_debug("Start evicting range range=%p start_lba_main=%llu, start_lba_aux=%llu, offset=%llu\n",
 					range, range->start_lba_main, range->start_lba_aux, offset);
 
-	cur_bit = lba2bit(range, range->start_lba_main + offset);
+	cur_bit = lba_aux2bit(range, range->start_lba_aux + offset);
 	first_bit = find_next_bit(range->bitmap, data->range_bitmap_size, cur_bit);
 	next_zero_bit = find_next_zero_bit(range->bitmap, data->range_bitmap_size, first_bit);
 
@@ -91,18 +91,19 @@ uint64_t evict_range(struct msb_data *data, struct msb_range *range, uint64_t la
 			range, cur_bit, first_bit, next_zero_bit);
 
 	while(first_bit != data->range_bitmap_size){
-		first_sector = bit2lba(range, first_bit);
-		sectors = bit2lba(range, next_zero_bit) - first_sector;
+		first_sector = bit2lba_aux(range, first_bit);
+		sectors = bit2lba_aux(range, next_zero_bit) - first_sector;
 
 		if(sectors > BIO_MAX_PAGES * PAGE_SIZE / KERNEL_SECT_SIZE){
 			sectors = BIO_MAX_PAGES * PAGE_SIZE / KERNEL_SECT_SIZE;
 		}
 
 		pr_debug("Generate evict bio first_sect=%llu, len=%d\n", first_sector, sectors);
+
 		//res = __create_io(data, range, first_sector, sectors, WRITE);
 		res = generate_evict_bio(first_sector, sectors, data->dev, range);
 		if(res != 0){
-			pr_debug("Cannot create evict io while evicting range=%p", range);
+			pr_err("Cannot create evict io while evicting range=%p", range);
 			return offset;
 		}
 
@@ -110,7 +111,7 @@ uint64_t evict_range(struct msb_data *data, struct msb_range *range, uint64_t la
 
 		pr_debug("Current number of evict cmd = %d of %llu\n",
 				atomic_read(&data->num_evict_cmd), data->max_num_evict_cmd);
-		cur_bit = lba2bit(range, first_sector + sectors);
+		cur_bit = lba_aux2bit(range, first_sector + sectors);
 		first_bit = find_next_bit(range->bitmap, data->range_bitmap_size, cur_bit);
 		next_zero_bit = find_next_zero_bit(range->bitmap, data->range_bitmap_size, first_bit);
 
@@ -124,7 +125,7 @@ uint64_t evict_range(struct msb_data *data, struct msb_range *range, uint64_t la
 						range, data->range_bitmap_size);
 				return data->range_size_sectors;
 			} else{ // something left in this range and it will be evicted later
-				offset = first_sector + sectors - range->start_lba_main;
+				offset = first_sector + sectors - range->start_lba_aux;
 				pr_debug("Max allowed number of evict cmd achieved for range=%p, returned offset=%llu\n",
 						range, offset);
 				return offset;

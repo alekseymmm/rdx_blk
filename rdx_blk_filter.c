@@ -53,7 +53,6 @@ void process_pending_req(struct work_struct *ws){
 		}
 	}
 }
-static int test_busy = 1;
 
 //return 0 for successful redirection and -EBUSY if range is migrating
 int __redirect_req(struct rdx_request *req, struct msb_range *range, struct msb_data *data){
@@ -113,6 +112,8 @@ int __redirect_req(struct rdx_request *req, struct msb_range *range, struct msb_
 		}
 		read_unlock_bh(&range->lock);
 	}
+	pr_debug("bio=%p : dir=%s, dev=%s, first_sect=%lu, sectors=%d\n",
+			bio, bio_data_dir(bio) == WRITE ? "W" : "R", bio->bi_bdev->bd_disk->disk_name, bio_first_sector(bio), bio_sectors(bio));
 	return res;
 }
 
@@ -150,10 +151,6 @@ int filter_write_req(struct msb_data *data, struct rdx_request *req){
 	} else {
 		//we found range for this scmd
 		//redirect scmd according to range mapping
-		if(test_busy){
-			test_busy = 0;
-			return -EBUSY;
-		}
 		res = __redirect_req(req, range, data);
 	}
 	return res;

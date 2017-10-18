@@ -22,7 +22,6 @@
 #include "rdx_blk_range.h"
 #include "rdx_blk_request.h"
 
-
 //must be called under data->used_ranges_lock
 inline uint64_t __get_new_aux_dsc_lba(struct msb_data *data){
 	uint64_t res = 0;
@@ -246,10 +245,10 @@ int msb_intersect_range(struct msb_data *data, struct msb_range *range, struct r
 
 	struct bio *usr_bio = req->usr_bio;
 
-	int bio_end_sect_bit = lba2bit(range, bio_end_sector(usr_bio)) - 1; //the last bit covered by bio
+	int bio_end_sect_bit = lba_main2bit(range, bio_end_sector(usr_bio)) - 1; //the last bit covered by bio
 
 	while(1){ //is it a good idea ? It is!
-		int bio_first_sect_bit = lba2bit(range, bio_first_sector(usr_bio));
+		int bio_first_sect_bit = lba_main2bit(range, bio_first_sector(usr_bio));
 
 		pr_debug("Intersect bio=%p first_sect=%lu, len=%d with range=%p start_lba_main=%llu\n",
 				usr_bio, bio_first_sector(usr_bio), bio_sectors(usr_bio), range, range->start_lba_main);
@@ -330,7 +329,7 @@ int msb_intersect_range(struct msb_data *data, struct msb_range *range, struct r
 
 				pr_debug("Not full bio covered by range. Insert new split bio . Continue redirecting....\n");
 
-				intersection = bit2lba(range, next_zero_bit + 1) - bio_first_sector(usr_bio);
+				intersection = bit2lba_main(range, next_zero_bit + 1) - bio_first_sector(usr_bio);
 				split = bio_split(usr_bio, intersection, GFP_NOIO, split_bioset);
 				if(!split){
 					pr_debug("Cannot split\n");

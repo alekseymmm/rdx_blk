@@ -56,15 +56,12 @@ void __req_put(struct rdx_request *req)
 					req, usr_bio, usr_bio->bi_iter.bi_sector, usr_bio->bi_iter.bi_size,
 					usr_bio->bi_iter.bi_idx, usr_bio->bi_iter.bi_bvec_done);
 
-			pr_debug("Remap bio=%p to dev=%s\n",
-					usr_bio, req->dev->aux_bdev->bd_disk->disk_name);
-
 			range = req->range;
-			offset = req->first_sector - range->start_lba_main;
-			req->first_sector = range->start_lba_aux + offset;
+			offset = req->first_sector - range->start_lba_aux;
+			req->first_sector = range->start_lba_main + offset;
 
 			usr_bio->bi_bdev = req->dev->main_bdev;
-			usr_bio->bi_iter.bi_sector = range->start_lba_aux + offset;
+			usr_bio->bi_iter.bi_sector = range->start_lba_main + offset;
 			usr_bio->bi_iter.bi_size = req->sectors << 9;
 			usr_bio->bi_iter.bi_idx = 0;
 			usr_bio->bi_iter.bi_bvec_done = 0;
@@ -73,6 +70,9 @@ void __req_put(struct rdx_request *req)
 			req->type = RDX_REQ_EVICT_W;
 
 			atomic_set(&req->ref_cnt, 1);
+			pr_debug("Remap bio=%p : dir=%s, dev=%s, first_sect=%lu, sectors=%d\n",
+					usr_bio, bio_data_dir(usr_bio) == WRITE ? "W" : "R", usr_bio->bi_bdev->bd_disk->disk_name,
+					bio_first_sector(usr_bio), bio_sectors(usr_bio));
 			pr_debug("bio=%p, bio->remaining=%d bio->bi_cnt=%d\n", usr_bio, atomic_read(&usr_bio->__bi_remaining), atomic_read(&usr_bio->__bi_cnt));
 			submit_bio(usr_bio);
 		}
@@ -95,20 +95,18 @@ void __req_put(struct rdx_request *req)
 			data = range->data;
 			pr_debug("in interrupt %lu, in irq=%lu, in soft_irq=%lu\n", in_interrupt(), in_irq(),in_softirq() );
 
-			offset = req-> first_sector - range->start_lba_aux;
-			main_first_sector = range->start_lba_main + offset;
 			write_lock_bh(&range->lock);
-				msb_clearbits_in_range(range, main_first_sector, req->sectors);
+				msb_clearbits_in_range(range, req->first_sector, req->sectors);
 				bit_pos = find_first_bit(range->bitmap, data->range_bitmap_size);
 				pr_debug("In range=%p position of nonzero bit = %lu \n", range, bit_pos);
 			write_unlock_bh(&range->lock);
 
-			atomic_dec(&range->data->num_evict_cmd);
-			wake_up_interruptible(&range->data->wq_evict_cmd);
-
 			if(bit_pos == data->range_bitmap_size){
 				msb_range_delete(range);
 			}
+
+			atomic_dec(&range->data->num_evict_cmd);
+			wake_up_interruptible(&range->data->wq_evict_cmd);
 
 			usr_bio->bi_end_io = req->__usr_bio_end_io;
 			usr_bio->bi_private = req->usr_bio_private;

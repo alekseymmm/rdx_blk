@@ -181,6 +181,7 @@ struct rdx_request *__create_req(struct bio *bio, struct rdx_blk *dev, enum rdx_
 	req->rw = bio_data_dir(bio);
 	req->type = type;
 	req->buf = NULL;
+	INIT_LIST_HEAD(&req->list);
 
 	//save info about initial bio
 	req->usr_bio = bio;

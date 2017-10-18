@@ -31,6 +31,8 @@ void process_pending_req(struct work_struct *ws){
 	struct list_head submit_list;
 	struct rdx_request *req, *req_next;
 
+	INIT_LIST_HEAD(&submit_list);
+
 	spin_lock_bh(&rdx_blk->req_list_lock);
 		list_for_each_entry_safe(req, req_next, &rdx_blk->req_list, list){
 			list_del(&req->list);
@@ -51,6 +53,7 @@ void process_pending_req(struct work_struct *ws){
 		}
 	}
 }
+static int test_busy = 1;
 
 //return 0 for successful redirection and -EBUSY if range is migrating
 int __redirect_req(struct rdx_request *req, struct msb_range *range, struct msb_data *data){
@@ -58,10 +61,12 @@ int __redirect_req(struct rdx_request *req, struct msb_range *range, struct msb_
 	int res = 0;
 	struct bio *bio = req->usr_bio;
 
+
 	pr_debug("req=%p, usr_bio=%p, dir=%s, first_sec=%lu, sectors=%lu",
 			req, req->usr_bio, bio_data_dir(bio) == WRITE ? "W" : "R", req->first_sector, req->sectors);
 
 	if(bio_data_dir(bio) == WRITE){
+
 		write_lock_bh(&range->lock);
 		{
 			//if range is involved in migration process then retry this command later
@@ -145,6 +150,10 @@ int filter_write_req(struct msb_data *data, struct rdx_request *req){
 	} else {
 		//we found range for this scmd
 		//redirect scmd according to range mapping
+		if(test_busy){
+			test_busy = 0;
+			return -EBUSY;
+		}
 		res = __redirect_req(req, range, data);
 	}
 	return res;
@@ -210,8 +219,9 @@ int msb_write_filter(struct msb_data *data, struct bio *bio, bool bio_with_req)
 			}
 			pr_debug("for bio=%p created req=%p first_sect=%lu, sectors=%lu\n",
 							split, req, req->first_sector, req->sectors);
+    	} else {
+    		req = (struct rdx_request *)bio->bi_private;
     	}
-
 
 		res = filter_write_req(data, req);
 
@@ -220,16 +230,17 @@ int msb_write_filter(struct msb_data *data, struct bio *bio, bool bio_with_req)
 			submit_bio(bio);
 		}
 		if(res == -EBUSY){ //bio to range that is evicting
+			struct rdx_blk *dev = data->dev; //also can get dev from request
 			pr_debug("Returned -EBUSY for bio(%p), bdev=%s, first_sector=%lu, size=%d\n",
     				split, split->bi_bdev->bd_disk->disk_name, bio_first_sector(split), bio_sectors(split));
-			spin_lock_bh(&rdx_blk->req_list_lock);
-			list_add_tail(&req->list, &rdx_blk->req_list);
-			spin_unlock_bh(&rdx_blk->req_list_lock);
+			spin_lock_bh(&dev->req_list_lock);
+			list_add_tail(&req->list, &dev->req_list);
+			spin_unlock_bh(&dev->req_list_lock);
 
 			if(atomic_add_unless(&rdx_blk->processing_pending_req, 1, 1)){
 				pr_debug("Init rdx_blk->pending_req_work and queue it\n");
-				INIT_WORK(&rdx_blk->penging_req_work, process_pending_req);
-				queue_work(rdx_blk_wq, &rdx_blk->penging_req_work);
+				INIT_WORK(&dev->penging_req_work, process_pending_req);
+				queue_work(rdx_blk_wq, &dev->penging_req_work);
 			}
 		}
     }while(split != bio);
@@ -335,6 +346,8 @@ int msb_read_filter(struct msb_data *data, struct bio *bio, bool bio_with_req)
 			}
 			pr_debug("for bio=%p created req=%p first_sect=%lu, sectors=%lu\n",
 							split, req, req->first_sector, req->sectors);
+    	} else {
+    		req = (struct rdx_request *)bio->bi_private;
     	}
 
 		res = filter_read_req(data, req);

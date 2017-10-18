@@ -199,6 +199,7 @@ static int rdx_blk_create_dev(void)
 	setup_timer(&rdx_blk->evict_timer, __evict_timer_handler, (unsigned long)rdx_blk->data);
 	atomic_set(&rdx_blk->processing_pending_req, 0);
 	spin_lock_init(&rdx_blk->req_list_lock);
+	INIT_LIST_HEAD(&rdx_blk->req_list);
 
 	return 0;
 
@@ -262,7 +263,9 @@ out:
 
 static void __exit rdx_blk_exit(void)
 {
-	stop_evict_service(rdx_blk);
+	if(rdx_blk != NULL){
+		stop_evict_service(rdx_blk);
+	}
 
 	if (rdx_blk != NULL){
 		rdx_destroy_dev();

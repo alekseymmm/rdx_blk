@@ -14,13 +14,45 @@
 #include "rdx_blk_filter.h"
 #include "rdx_blk_range.h"
 
+static void __evict_write(struct work_struct *ws){
+	struct  msb_range *range;
+	uint64_t offset;
+	struct rdx_request *req = container_of(ws, struct rdx_request, work);
+	struct bio *usr_bio = req->usr_bio;
+
+	//trace_block_bio_complete(bdev_get_queue(usr_bio->bi_bdev), usr_bio, req->err);
+
+	pr_debug("req=%p bio=%p finished. bi_iter: bi_sector=%lu, bi_size=%d, bi_idx=%d, bi_bvec_done=%d\n",
+			req, usr_bio, usr_bio->bi_iter.bi_sector, usr_bio->bi_iter.bi_size,
+			usr_bio->bi_iter.bi_idx, usr_bio->bi_iter.bi_bvec_done);
+
+	range = req->range;
+	offset = req->first_sector - range->start_lba_aux;
+	req->first_sector = range->start_lba_main + offset;
+
+	usr_bio->bi_bdev = req->dev->main_bdev;
+	usr_bio->bi_iter.bi_sector = range->start_lba_main + offset;
+	usr_bio->bi_iter.bi_size = req->sectors << 9;
+	usr_bio->bi_iter.bi_idx = 0;
+	usr_bio->bi_iter.bi_bvec_done = 0;
+	usr_bio->bi_opf = REQ_OP_WRITE;
+
+	req->type = RDX_REQ_EVICT_W;
+
+	atomic_set(&req->ref_cnt, 1);
+	pr_debug("Remap bio=%p : dir=%s, dev=%s, first_sect=%lu, sectors=%d\n",
+			usr_bio, bio_data_dir(usr_bio) == WRITE ? "W" : "R", usr_bio->bi_bdev->bd_disk->disk_name,
+			bio_first_sector(usr_bio), bio_sectors(usr_bio));
+	pr_debug("bio=%p, bio->remaining=%d bio->bi_cnt=%d\n", usr_bio, atomic_read(&usr_bio->__bi_remaining), atomic_read(&usr_bio->__bi_cnt));
+	submit_bio(usr_bio);
+}
+
+
 void __req_put(struct rdx_request *req)
 {
 	struct msb_range *range;
 	struct msb_data *data;
 	unsigned long bit_pos;
-	uint64_t offset ;
-
 	pr_debug("Before dec_and_test for req=%p req->ref->cnt=%d\n", req, atomic_read(&req->ref_cnt));
 
 	switch(req->type){
@@ -48,39 +80,14 @@ void __req_put(struct rdx_request *req)
 		break;
 	case RDX_REQ_EVICT_R:
 		if (atomic_dec_and_test(&req->ref_cnt)) {
-			struct bio *usr_bio = req->usr_bio;
-
-			//trace_block_bio_complete(bdev_get_queue(usr_bio->bi_bdev), usr_bio, req->err);
-
-			pr_debug("req=%p bio=%p finished. bi_iter: bi_sector=%lu, bi_size=%d, bi_idx=%d, bi_bvec_done=%d\n",
-					req, usr_bio, usr_bio->bi_iter.bi_sector, usr_bio->bi_iter.bi_size,
-					usr_bio->bi_iter.bi_idx, usr_bio->bi_iter.bi_bvec_done);
-
-			range = req->range;
-			offset = req->first_sector - range->start_lba_aux;
-			req->first_sector = range->start_lba_main + offset;
-
-			usr_bio->bi_bdev = req->dev->main_bdev;
-			usr_bio->bi_iter.bi_sector = range->start_lba_main + offset;
-			usr_bio->bi_iter.bi_size = req->sectors << 9;
-			usr_bio->bi_iter.bi_idx = 0;
-			usr_bio->bi_iter.bi_bvec_done = 0;
-			usr_bio->bi_opf = REQ_OP_WRITE;
-
-			req->type = RDX_REQ_EVICT_W;
-
-			atomic_set(&req->ref_cnt, 1);
-			pr_debug("Remap bio=%p : dir=%s, dev=%s, first_sect=%lu, sectors=%d\n",
-					usr_bio, bio_data_dir(usr_bio) == WRITE ? "W" : "R", usr_bio->bi_bdev->bd_disk->disk_name,
-					bio_first_sector(usr_bio), bio_sectors(usr_bio));
-			pr_debug("bio=%p, bio->remaining=%d bio->bi_cnt=%d\n", usr_bio, atomic_read(&usr_bio->__bi_remaining), atomic_read(&usr_bio->__bi_cnt));
-			submit_bio(usr_bio);
+			pr_debug("Init work struct for req =%p\n", req);
+		    INIT_WORK(&req->work, __evict_write);
+		    queue_work(rdx_blk_wq, &req->work);
 		}
 
 		break;
 	case RDX_REQ_EVICT_W:
 		if (atomic_dec_and_test(&req->ref_cnt)) {
-			uint64_t main_first_sector, offset ;
 			struct bio *usr_bio = req->usr_bio;
 
 			//trace_block_bio_complete(bdev_get_queue(usr_bio->bi_bdev), usr_bio, req->err);

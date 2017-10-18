@@ -63,6 +63,7 @@ struct rdx_request{
 	enum rdx_req_type 	type;
 	char  				*buf;
 	struct list_head	list;
+	struct work_struct	work;
 };
 
 struct rdx_blk {

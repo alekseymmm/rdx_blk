@@ -147,9 +147,9 @@ void evict_to_main(struct msb_data* data){
 	pr_debug("Migration started. Lock tree_lock...\n");
 	tree_root = &data->ranges;
 
-	read_lock_bh(&data->tree_lock);
+	read_lock(&data->tree_lock);
 		tree_node = rb_first(tree_root);
-	read_unlock_bh(&data->tree_lock);
+	read_unlock(&data->tree_lock);
 
 	pr_debug("Unlock tree_lock\n");
 
@@ -159,9 +159,9 @@ void evict_to_main(struct msb_data* data){
 		range = container_of(tree_node, struct msb_range, tree_node);
 
 		//choose  next rb tree node in case we delete this node after eviction
-		read_lock_bh(&data->tree_lock);
+		read_lock(&data->tree_lock);
 			tree_node = rb_next(tree_node);
-		read_unlock_bh(&data->tree_lock);
+		read_unlock(&data->tree_lock);
 
 		//if there are active rw commands to this range then skip it
 		// 0 mens we don't have any active cmd

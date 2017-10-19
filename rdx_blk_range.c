@@ -76,9 +76,9 @@ struct msb_range *msb_range_create(struct msb_data *data, uint64_t start_lba_mai
     struct msb_range *range = NULL;
 	int64_t res = 0;
 
-	write_lock_bh(&data->used_ranges_lock);
+	write_lock(&data->used_ranges_lock);
 		res = __get_new_aux_dsc_lba(data);
-	write_unlock_bh(&data->used_ranges_lock);
+	write_unlock(&data->used_ranges_lock);
 
 		//if there are no empty ranges in aux
 		if( res == -ENOSPC){
@@ -127,24 +127,24 @@ void msb_range_delete(struct msb_range *range){
 	msb_lock_buckets(range->data->ht, range->start_lba_main, 0, WRITE);
 
 	pr_debug("for range=%p lock tree_lock before range deletion\n", range);
-	write_lock_bh(&range->data->tree_lock);
+	write_lock(&range->data->tree_lock);
 
 	pr_debug("for range=%p lock data->used_ranges before range deletion\n", range);
-	write_lock_bh(&range->data->used_ranges_lock);
+	write_lock(&range->data->used_ranges_lock);
 
 	msb_hashtable_del_range(range->data->ht, range);
 	msb_range_erase_from_tree(range->data, range);
 	__put_aux_dsc_lba(range->data, range->start_lba_aux);
 
 	pr_debug("for range=%p unlock data->used_ranges after range deletion\n", range);
-	write_unlock_bh(&range->data->used_ranges_lock);
+	write_unlock(&range->data->used_ranges_lock);
 
 	pr_debug("for range=%p unlock tree_lock after range deletion\n", range);
-	write_unlock_bh(&range->data->tree_lock);
+	write_unlock(&range->data->tree_lock);
 
 	pr_debug("For range=%p  start_lba_main=%llu start_lba_aux=%llu unlock buckets in HT after range deletion\n",
 			range, range->start_lba_main, range->start_lba_aux);
-    msb_unlock_buckets(range->data->ht, range->start_lba_main, range->data->range_size_sectors, WRITE);
+    msb_unlock_buckets(range->data->ht, range->start_lba_main, 0, WRITE);
 
 	pr_debug("Range %p start_lba_main=%llu deleted\n",
     		range, range->start_lba_main);

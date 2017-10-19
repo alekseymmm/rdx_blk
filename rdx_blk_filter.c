@@ -66,7 +66,7 @@ int __redirect_req(struct rdx_request *req, struct msb_range *range, struct msb_
 
 	if(bio_data_dir(bio) == WRITE){
 
-		write_lock_bh(&range->lock);
+		write_lock(&range->lock);
 		{
 			//if range is involved in migration process then retry this command later
 			if(atomic_inc_not_zero(&range->ref_cnt) == 0){
@@ -88,10 +88,10 @@ int __redirect_req(struct rdx_request *req, struct msb_range *range, struct msb_
 			    		range, atomic_read(&range->ref_cnt));
 			}
 		}
-		write_unlock_bh(&range->lock);
+		write_unlock(&range->lock);
 	}// dir == READ
 	else{
-		read_lock_bh(&range->lock);
+		read_lock(&range->lock);
 		{
 			//if range is involved in migration process then retry this command later
 			if(atomic_inc_not_zero(&range->ref_cnt) == 0){
@@ -110,7 +110,7 @@ int __redirect_req(struct rdx_request *req, struct msb_range *range, struct msb_
 			    		range, atomic_read(&range->ref_cnt));
 			}
 		}
-		read_unlock_bh(&range->lock);
+		read_unlock(&range->lock);
 	}
 	pr_debug("bio=%p : dir=%s, dev=%s, first_sect=%lu, sectors=%d\n",
 			bio, bio_data_dir(bio) == WRITE ? "W" : "R", bio->bi_bdev->bd_disk->disk_name, bio_first_sector(bio), bio_sectors(bio));
@@ -144,9 +144,9 @@ int filter_write_req(struct msb_data *data, struct rdx_request *req){
 		msb_hashtable_add_range(data->ht, range);
 
 		//insert after redirection so that we dont start eviction of this range before actual redirection
-		write_lock_bh(&data->tree_lock);
+		write_lock(&data->tree_lock);
 			msb_range_tree_insert(data, range);
-		write_unlock_bh(&data->tree_lock);
+		write_unlock(&data->tree_lock);
 
 	} else {
 		//we found range for this scmd

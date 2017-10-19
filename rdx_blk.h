@@ -30,7 +30,7 @@
 #define MSB_DEFAULT_MAX_NUM_EVICT_CMD (8)
 #define MSB_BLOCK_SIZE_SECTORS (8)
 
-#define MSB_HT_BUCKET_SHIFT  (24)
+#define MSB_HT_BUCKET_SHIFT  (26)
 
 extern struct rdx_blk *rdx_blk;
 extern struct kmem_cache *rdx_request_cachep;

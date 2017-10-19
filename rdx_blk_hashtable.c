@@ -103,9 +103,9 @@ void msb_lock_buckets(struct msb_hashtable *ht, uint64_t lba, uint32_t len, int 
 		pr_debug("For lba=%llu len=%d slen=%d (start_lba_main=%llu) offset%llu: lock bucket number=%llu\n",
 				lba, len, slen, start_lba_main, offset, hash);
 		if(lock_type == WRITE){
-			write_lock_bh(&ht->buckets[hash].lock);
+			write_lock(&ht->buckets[hash].lock);
 		} else {// read lock
-			read_lock_bh(&ht->buckets[hash].lock);
+			read_lock(&ht->buckets[hash].lock);
 		}
 
 		lba += slen;
@@ -132,9 +132,9 @@ void msb_unlock_buckets(struct msb_hashtable *ht, uint64_t lba, uint32_t len, in
 		pr_debug("For lba=%llu len=%d slen=%d (start_lba_main=%llu) offset%llu: unlock bucket number=%llu\n",
 				lba, len, slen, start_lba_main, offset, hash);
 		if(unlock_type == WRITE){
-			write_unlock_bh(&ht->buckets[hash].lock);
+			write_unlock(&ht->buckets[hash].lock);
 		} else { // read lock
-			read_unlock_bh(&ht->buckets[hash].lock);
+			read_unlock(&ht->buckets[hash].lock);
 		}
 
 		lba += slen;

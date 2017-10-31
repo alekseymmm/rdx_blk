@@ -100,7 +100,7 @@ static void rdx_destroy_dev(void)
 		pr_debug("For dev %s put main_bdev\n", RDX_BLKDEV_NAME);
 	}
 
-	if(IS_ERR(rdx_blk->aux_bdev)){
+	if(!IS_ERR(rdx_blk->aux_bdev)){
 		blkdev_put(rdx_blk->aux_bdev, FMODE_READ | FMODE_WRITE);
 		pr_debug("For dev %s put aux_bdev\n", RDX_BLKDEV_NAME);
 	}

@@ -94,6 +94,7 @@ static void __evict_write_end(struct work_struct *ws){
 	}
 	kmem_cache_free(rdx_request_cachep, req);
 }
+
 void __req_put(struct rdx_request *req)
 {
 	struct msb_range *range;

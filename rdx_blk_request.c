@@ -73,12 +73,12 @@ static void __evict_write_end(struct work_struct *ws){
 		pr_debug("In range=%p position of nonzero bit = %lu \n", range, bit_pos);
 	write_unlock(&range->lock);
 
+	atomic_dec(&range->data->num_evict_cmd);
+	wake_up_interruptible(&range->data->wq_evict_cmd);
+
 	if(bit_pos == data->range_bitmap_size){
 		msb_range_delete(range);
 	}
-
-	atomic_dec(&range->data->num_evict_cmd);
-	wake_up_interruptible(&range->data->wq_evict_cmd);
 
 	usr_bio->bi_end_io = req->__usr_bio_end_io;
 	usr_bio->bi_private = req->usr_bio_private;

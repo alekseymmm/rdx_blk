@@ -67,7 +67,7 @@ struct msb_data *__alloc_data(struct rdx_blk *dev, uint64_t range_size_sectors, 
 
     rwlock_init(&data->used_ranges_lock);
 
-    data->num_ranges = get_capacity(data->dev->main_bdev->bd_disk) / data->range_size_sectors - 1; // TODO: think about this
+    data->num_ranges = get_capacity(data->dev->aux_bdev->bd_disk) / data->range_size_sectors - 1 ; // TODO: think about this
     //using kzalloc is better for performance but limited in size
     data->used_ranges_bitmap = vzalloc(sizeof(long) * BITS_TO_LONGS(data->num_ranges));
 

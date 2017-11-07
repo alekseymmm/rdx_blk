@@ -54,8 +54,8 @@ void print_used_ranges(struct msb_data* data){
 	if(buf){
 		read_lock(&data->used_ranges_lock);
 		bitmap_print_to_pagebuf(true, buf, data->used_ranges_bitmap,data->num_ranges);
-		pr_debug("num_ranges=%llu, set bits in bitmap: %s \n",
-				data->num_ranges, buf);
+		pr_debug("max_num_ranges=%llu, sizeof(struct msb_range)=%lu set bits in bitmap: %s \n",
+				data->num_ranges, sizeof(struct msb_range), buf);
 		read_unlock(&data->used_ranges_lock);
 		kfree(buf);
 	} else{
